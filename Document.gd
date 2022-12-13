@@ -53,7 +53,6 @@ span {
     font_size: 32;
 }
 big {
-    display: inline;
     font_size: 32;
 }
 b {
@@ -225,14 +224,14 @@ func reflow():
             #print(child)
             
             var child_size = child.get_combined_minimum_size()
+            var offset = Vector2()
             if "calculated_props" in child:
                 #print("  >>")
                 child.reflow() # prevents size flickering when resized
                 #print("  <<")
                 child_size.x = max(child_size.x, child.rect_size.x)
                 child_size.y = max(child_size.y, child.rect_size.y)
-            var offset = Vector2()
-            if "calculated_props" in child:
+                
                 child_size.x += child.calculated_props.margin_left
                 child_size.x += child.calculated_props.margin_right
                 
@@ -259,10 +258,13 @@ func reflow():
             
             y_cursor_next = max(y_cursor_next, y_cursor + child_size.y)
             
-            row.push_back([child, x_cursor, child_size, offset])
-            max_x = max(max_x, x_cursor + child_size.x)
-            
-            x_cursor += child_size.x
+            # skip adding label if it's just a space and is at the beginning of the line
+            if row.size() == 0 and child is Label and child.text == " ":
+                pass
+            else:
+                row.push_back([child, x_cursor, child_size, offset])
+                max_x = max(max_x, x_cursor + child_size.x)
+                x_cursor += child_size.x
         if row.size() > 0:
             #print("fallback ", y_cursor, " ", y_cursor_next)
             _reflow_row(row, y_cursor, y_cursor_next)

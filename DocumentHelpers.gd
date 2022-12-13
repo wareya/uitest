@@ -67,6 +67,7 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
             var n = Label.new()
             n.text = chunk
             nodes.push_back(n)
+        
         return nodes
     elif _xml.name.to_lower() == "img":
         var n = TextureRect.new()
