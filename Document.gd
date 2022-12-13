@@ -23,12 +23,13 @@ var calculated_props = {
 var font_cache = {}
 
 func make_font(data : DynamicFontData, size : float):
-    if [data, size] in font_cache:
-        return font_cache[[data, size]]
+    var font_name = str(data) + " size: " + str(size)
+    if font_name in font_cache:
+        return font_cache[font_name]
     var font = DynamicFont.new()
     font.font_data = data
     font.size = size
-    font_cache[[data, size]] = font
+    font_cache[font_name] = font
     return font
 
 var assigned_props = {
