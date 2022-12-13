@@ -117,8 +117,14 @@ func _init():
     # warning-ignore:return_value_discarded
     connect("sort_children", self, "reflow")
 
+func tri(x):
+    x /= 4
+    return abs(x - floor(x)-0.5)*4-1
+
 var asdf = 0
-func _process(_delta):
+var time = 0
+func _process(delta):
+    time += delta
     if Input.is_action_just_pressed("ui_accept") and is_inside_tree() and self == get_tree().current_scene:
         var style_data = DocumentHelpers.parse_style(stylesheet)
         var scene = from_xml(markup)
@@ -127,6 +133,10 @@ func _process(_delta):
         get_tree().current_scene = scene
         scene.queue_sort()
         scene.style_data = style_data
+    # performance test
+    #if is_inside_tree() and self == get_tree().current_scene:
+    #    print("asdf")
+    #    anchor_right = lerp(0.25, 1.0, tri(time*4)/2+0.5)
 
 func from_xml(xml : String):
     return DocumentHelpers.from_xmlnode(DocumentHelpers.parse_document(xml), get_script())
@@ -247,7 +257,7 @@ func reflow():
                 offset = Vector2(child.calculated_props.padding_left, child.calculated_props.padding_top)
                 offset.x += child.calculated_props.offset_x
                 offset.y += child.calculated_props.offset_y
-                print(offset)
+                #print(offset)
             
             #print(child, " ", child_size, " ", x_cursor, " ", y_cursor, "->", y_cursor_next, " ", x_limit)
             
