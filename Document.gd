@@ -17,6 +17,12 @@ var calculated_props = {
     "offset_y" : 0,
     "vertical_align": "bottom",
     "font_family": preload("res://font/Andika-Regular.ttf"),
+    "background": null,
+    "background_9patch" : false,
+    "background_9patch_top": 0,
+    "background_9patch_bottom": 0,
+    "background_9patch_left": 0,
+    "background_9patch_right": 0,
     "font_size": 24,
 }
 
@@ -44,7 +50,7 @@ var id_to_node = {}
 export var style = ""
 
 var markup = """
-there <span> once </span> was a man from <img src='res://icon.png'/> who reallylongwordgoeshere knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he ran </b>
+there <span> once </span> was <fun>a man</fun> from <img src='res://icon.png'/> who knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he ran </b>
 """
 
 var stylesheet = """
@@ -62,6 +68,24 @@ b {
 }
 br {
     display: block;
+}
+root {
+    background: "res://9PatchGradient.tres";
+    margin_left: 5;
+    margin_right: 5;
+    padding_top: 8;
+    padding_left: 8;
+    padding_bottom: 8;
+    padding_right: 8;
+    background_9patch: true;
+    background_9patch_top: 4.5;
+    background_9patch_bottom: 6.5;
+    background_9patch_left: 6;
+    background_9patch_right: 6;
+}
+fun {
+    display: inline-block;
+    background: "res://9PatchGradient2.tres";
 }
 """
 
@@ -136,7 +160,7 @@ func _process(delta):
     # performance test
     #if is_inside_tree() and self == get_tree().current_scene:
     #    print("asdf")
-    #    anchor_right = lerp(0.25, 1.0, tri(time*4)/2+0.5)
+    #    anchor_right = lerp(0.25, 1.0, tri(time*8)/2+0.5)
 
 func from_xml(xml : String):
     return DocumentHelpers.from_xmlnode(DocumentHelpers.parse_document(xml), get_script())
@@ -187,11 +211,13 @@ func _reflow_row(row : Array, top : float, bottom : float):
             else:
                 offset.y -= max_descent
                 offset.y += child.max_descent
-                
-        #child.set_global_position(Vector2(x + offset.x, y) - origin)
-        child.rect_position = Vector2(x, y) + offset
+        
+        var origin = get_global_rect().position
+        child.set_global_position(Vector2(x, y) + offset + origin)
+        #child.rect_position = Vector2(x, y) + offset
     pass
 
+var show_self = true
 func reflow():
     #print("reflow of ", doc_name)
     font_cache = {}
@@ -203,7 +229,9 @@ func reflow():
         var size = Vector2()
         size.x = parent_size.x * (anchor_right - anchor_left)
         size.y = parent_size.y * (anchor_bottom - anchor_top)
-        var x_limit = size.x - calculated_props.padding_right
+        size.x -= calculated_props.margin_left + calculated_props.margin_right
+        size.y -= calculated_props.margin_top + calculated_props.margin_bottom
+        var x_limit = size.x - calculated_props.padding_right - calculated_props.padding_left
         var x_cursor = calculated_props.padding_left
         var y_cursor = calculated_props.padding_top
         var y_cursor_next = 0
@@ -231,7 +259,9 @@ func reflow():
                 for c in child.get_children():
                     etc.push_back([c, child])
                 check_queue = etc + check_queue
+                child.show_self = false
             else:
+                if "show_self" in child: child.show_self = true
                 process_nodes.push_back([child, self])
         
         for _data in process_nodes:
@@ -277,7 +307,7 @@ func reflow():
                 _reflow_row(row, y_cursor, y_cursor_next)
                 row = []
                 y_cursor = y_cursor_next
-                x_cursor = 0
+                x_cursor = calculated_props.padding_left
                 if force_next_row_new:
                     x_cursor = x_limit
             
@@ -295,6 +325,26 @@ func reflow():
             _reflow_row(row, y_cursor, y_cursor_next)
             row = []
         
-        rect_size.x = max_x + calculated_props.margin_right
-        rect_size.y = y_cursor_next + calculated_props.margin_bottom
-        
+        rect_size.x = max_x + calculated_props.padding_right
+        print(rect_size.x)
+        rect_size.y = y_cursor_next + calculated_props.padding_bottom
+        if doc_name == "root":
+            rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_right)
+
+func _draw():
+    if !show_self:
+        return
+    var bg : Texture = calculated_props.background
+    if bg:
+        var canvas = get_canvas()
+        var canvas_item = get_canvas_item()
+        var bg_size = bg.get_size()
+        if calculated_props.background_9patch:
+            var top    = calculated_props.background_9patch_top
+            var bottom = calculated_props.background_9patch_bottom
+            var left   = calculated_props.background_9patch_left
+            var right  = calculated_props.background_9patch_right
+            VisualServer.canvas_item_add_nine_patch(canvas_item, Rect2(Vector2(), rect_size), Rect2(Vector2(), bg_size), bg.get_rid(), Vector2(left, top), Vector2(right, bottom))
+        else:
+            VisualServer.canvas_item_add_texture_rect(canvas_item, Rect2(Vector2(), rect_size), bg.get_rid(), true)
+    pass

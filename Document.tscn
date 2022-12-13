@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=2]
+[gd_scene load_steps=6 format=2]
 
 [ext_resource path="res://Document.gd" type="Script" id=1]
 [ext_resource path="res://icon.png" type="Texture" id=2]
 [ext_resource path="res://font/Andika-Regular.ttf" type="DynamicFontData" id=3]
+[ext_resource path="res://9PatchGradient.tres" type="Texture" id=4]
 
 [sub_resource type="DynamicFont" id=1]
 size = 24
@@ -11,7 +12,7 @@ font_data = ExtResource( 3 )
 [node name="Document" type="Container"]
 anchor_right = 1.0
 anchor_bottom = 1.0
-margin_right = -342.0
+margin_right = -330.0
 margin_bottom = -536.0
 script = ExtResource( 1 )
 
@@ -37,10 +38,17 @@ margin_bottom = 107.0
 custom_fonts/font = SubResource( 1 )
 text = "FSDJE "
 
-[node name="Label3" type="Label" parent="."]
+[node name="TextureRect2" type="TextureRect" parent="."]
 margin_left = 597.0
+margin_top = 52.0
+margin_right = 609.0
+margin_bottom = 64.0
+texture = ExtResource( 4 )
+
+[node name="Label3" type="Label" parent="."]
+margin_left = 609.0
 margin_top = 24.0
-margin_right = 682.0
+margin_right = 694.0
 margin_bottom = 64.0
 custom_fonts/font = SubResource( 1 )
 text = "sgfhdth"

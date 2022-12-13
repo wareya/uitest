@@ -89,6 +89,40 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
                 doc.add_child(cs)
         return doc
 
+static func preprocess_style(text : String):
+    var i = 0
+    var in_string = ""
+    var in_escape = false
+    var in_comment = false
+    var open_stack = []
+    var text_out = ""
+    while i < text.length():
+        var c = text[i]
+        i += 1
+        if in_escape:
+            in_escape = false
+            text_out += c
+        elif c == "\\":
+            in_escape = true
+            text_out += c
+        elif c == in_string:
+            in_string = ""
+            text_out += c
+        elif c == "'" or c == '"':
+            in_string = c
+            text_out += c
+        elif in_string:
+            text_out += c
+        elif c == "/" and i < text.length() and text[i] == "/":
+            in_comment = true
+        elif in_comment:
+            if c == "\n":
+                in_comment = false
+                text_out += c
+        else:
+            text_out += c
+    return text_out
+    
 static func preprocess_xml(text : String):
     var i = 0
     var in_string = ""
@@ -103,6 +137,8 @@ static func preprocess_xml(text : String):
             in_escape = true
         elif c == in_string:
             in_string = ""
+        elif c == "'" or c == '"':
+            in_string = c
         elif c == "<":
             open_stack.push_back(i-1)
         elif c == ">":
@@ -286,6 +322,10 @@ static func parse_style_rule(text : String, i : int):
                         rule_string = rule_string.strip_edges()
                         if rule_string.is_valid_float():
                             rule_string = rule_string.to_float()
+                        elif rule_string == "false":
+                            rule_string = false
+                        elif rule_string == "true":
+                            rule_string = true
                         rule_data.push_back(rule_string)
                         rule_string = ""
                     if c == "}" or c == ";":
@@ -297,6 +337,10 @@ static func parse_style_rule(text : String, i : int):
         rule_string = rule_string.strip_edges()
         if !in_string and rule_string.is_valid_float():
             rule_string = rule_string.to_float()
+        elif rule_string == "false":
+            rule_string = false
+        elif rule_string == "true":
+            rule_string = true
         rule_data.push_back(rule_string)
         rule_string = ""
     
@@ -341,6 +385,7 @@ static func parse_style_target(text : String, i : int):
         return null
 
 static func parse_style(text : String):
+    text = preprocess_style(text)
     var styles = []
     var i = 0
     while i < text.length():
