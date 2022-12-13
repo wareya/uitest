@@ -84,7 +84,6 @@ root {
     background_9patch_right: 6;
 }
 fun {
-    display: inline-block;
     background: "res://9PatchGradient2.tres";
 }
 """
@@ -332,7 +331,7 @@ func reflow():
             rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_right)
 
 func _draw():
-    # TODO: track the styles of inlined nodes and apply them here
+    # TODO: track the styles of inlined nodes and apply them here, using canvas_item_set_custom_rect
     if !show_self:
         return
     var bg : Texture = calculated_props.background
