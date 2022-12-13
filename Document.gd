@@ -332,6 +332,7 @@ func reflow():
             rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_right)
 
 func _draw():
+    # TODO: track the styles of inlined nodes and apply them here
     if !show_self:
         return
     var bg : Texture = calculated_props.background
