@@ -185,8 +185,9 @@ static func parse_document(doc : String):
                 var name = xml.get_node_name()
                 node.name = name
                 current.children.push_back(node)
-                stack.push_back(current)
-                current = node
+                if name != "br": # special case
+                    stack.push_back(current)
+                    current = node
             XMLParser.NODE_ELEMENT_END:
                 var name = xml.get_node_name()
                 if name == "" or name == current.name:

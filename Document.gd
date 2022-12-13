@@ -4,7 +4,7 @@ class_name Document
 
 var calculated_props = {
     "flow_dir": "h-lr",
-    "display": "block",
+    "display": "inline-block",
     "padding_left": 0,
     "padding_right": 0,
     "padding_top": 0,
@@ -44,7 +44,7 @@ var id_to_node = {}
 export var style = ""
 
 var markup = """
-there <span> once </span> was a man from <img src='res://icon.png'/> who knew all     too well of the <big>danger</big> <b> and so he ran </b>
+there <span> once </span> was a man from <img src='res://icon.png'/> who reallylongwordgoeshere knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he ran </b>
 """
 
 var stylesheet = """
@@ -53,15 +53,21 @@ span {
     font_size: 32;
 }
 big {
+    display: inline;
     font_size: 32;
 }
 b {
     display: inline;
     font_family: "res://font/Andika-Bold.ttf";
 }
+br {
+    display: block;
+}
 """
 
 var style_data = []
+
+var visible_characters : float = -1.0 # TODO implement
 
 const _inherited_props = ["font_family", "font_size"]
 func calculate_style(parent_props, style_data : Array, _font_cache):
@@ -249,12 +255,21 @@ func reflow():
             if doc_name != "root" and calculated_props.display == "inline":
                 continue
             #print("--test")
+            var new_row = false
+            var force_next_row_new = false
             if row.size() > 0 and (x_cursor + child_size.x > x_limit or child.size_flags_horizontal & SIZE_EXPAND):
+                new_row = true
+            if "calculated_props" in child and child.calculated_props.display == "block":
+                new_row = true
+                force_next_row_new = true
+            if new_row:
                 #print("--onto next row ", y_cursor, " ", y_cursor_next)
                 _reflow_row(row, y_cursor, y_cursor_next)
                 row = []
                 y_cursor = y_cursor_next
                 x_cursor = 0
+                if force_next_row_new:
+                    x_cursor = x_limit
             
             y_cursor_next = max(y_cursor_next, y_cursor + child_size.y)
             
