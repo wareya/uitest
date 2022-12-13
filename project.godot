@@ -1,0 +1,51 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=4
+
+_global_script_classes=[ {
+"base": "Container",
+"class": "Document",
+"language": "GDScript",
+"path": "res://Document.gd"
+}, {
+"base": "Container",
+"class": "DocumentHelpers",
+"language": "GDScript",
+"path": "res://DocumentHelpers.gd"
+} ]
+_global_script_class_icons={
+"Document": "",
+"DocumentHelpers": ""
+}
+
+[application]
+
+config/name="uitest"
+run/main_scene="res://Document.tscn"
+config/icon="res://icon.png"
+
+[autoload]
+
+Hud="*res://HUD.tscn"
+
+[gui]
+
+common/drop_mouse_on_gui_input_disabled=true
+
+[mono]
+
+project/assembly_name="uitest"
+
+[physics]
+
+common/enable_pause_aware_picking=true
+
+[rendering]
+
+environment/default_environment="res://default_env.tres"
