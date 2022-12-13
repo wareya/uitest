@@ -3,18 +3,21 @@ extends Container
 class_name Document
 
 var calculated_props = {
-    "flow_dir": "h-lr",
-    "display": "inline-block",
+    "display": "inline-block", # or block, or inline, or (TODO) absolute
+    
     "padding_left": 0,
     "padding_right": 0,
     "padding_top": 0,
     "padding_bottom": 0,
+    
     "margin_left": 0,
     "margin_right": 0,
     "margin_top": 0,
     "margin_bottom": 0,
+    
     "offset_x" : 0,
     "offset_y" : 0,
+    
     "vertical_align": "bottom",
     "font_family": preload("res://font/Andika-Regular.ttf"),
     "background": null,
@@ -24,6 +27,8 @@ var calculated_props = {
     "background_9patch_left": 0,
     "background_9patch_right": 0,
     "font_size": 24,
+    
+    "layout" : "flow_h_lr", # or vertical, or horizontal
 }
 
 var font_cache = {}
@@ -50,7 +55,7 @@ var id_to_node = {}
 export var style = ""
 
 var markup = """
-there <span> once </span> was <fun>a man</fun> from <img src='res://icon.png'/> who knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he ran </b>
+there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
 """
 
 var stylesheet = """
@@ -89,6 +94,7 @@ fun {
 """
 
 var style_data = []
+var custom_style_data = []
 
 var visible_characters : float = -1.0 # TODO implement
 
@@ -99,7 +105,7 @@ func calculate_style(parent_props, style_data : Array, _font_cache):
         for i in _inherited_props:
             calculated_props[i] = parent_props[i]
     
-    for ruleset in style_data:
+    for ruleset in style_data + custom_style_data:
         var valid_target = false
         for target in ruleset.targets:
             if target == doc_name:
@@ -127,7 +133,7 @@ func calculate_style(parent_props, style_data : Array, _font_cache):
     for child in get_children():
         if child.has_method("calculate_style"):
             child.calculate_style(calculated_props, style_data, font_cache)
-        elif child is Label:
+        elif child is Label or child is Button:
             var font = make_font(calculated_props.font_family, calculated_props.font_size)
             child.add_font_override("font", font)
 
@@ -223,7 +229,7 @@ func reflow():
     if doc_name == "root":
         calculate_style(null, style_data, font_cache)
     #print("sort...")
-    if calculated_props.flow_dir == "h-lr":
+    if calculated_props.layout == "flow_h_lr":
         var parent_size = get_parent_area_size()
         var size = Vector2()
         size.x = parent_size.x * (anchor_right - anchor_left)
@@ -325,7 +331,7 @@ func reflow():
             row = []
         
         rect_size.x = max_x + calculated_props.padding_right
-        print(rect_size.x)
+        #print(rect_size.x)
         rect_size.y = y_cursor_next + calculated_props.padding_bottom
         if doc_name == "root":
             rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_right)

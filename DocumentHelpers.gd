@@ -78,16 +78,43 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
             n.texture = load(_xml.children[0].text)
         return n
     else:
-        var doc = default_script.new()
-        doc.doc_name = _xml.name
+        var node
+        if _xml.name.to_lower() == "node":
+            print("trying to spawn a ", _xml.name)
+            if not "type" in _xml.attributes:
+                return null
+            node = ClassDB.instance(_xml.attributes.type)
+            if !node:
+                return null
+            for a_name in _xml.attributes:
+                print("setting... ", a_name)
+                if a_name == "type" or not a_name in node:
+                    continue
+                var a_val = _xml.attributes[a_name]
+                if a_val is String and a_val.begins_with("res://"):
+                    a_val = load(a_val)
+                elif not node.get(a_name) is String:
+                    a_val = str2var(a_val)
+                node.set(a_name, a_val)
+        else:
+            node = default_script.new()
+            node.doc_name = _xml.name
+            if "id" in _xml.attributes:
+                node.doc_id = _xml.attributes.id
+            if "class" in _xml.attributes:
+                node.doc_class = _xml.attributes.class.split(" ", false)
+            if "style" in _xml.attributes:
+                node.custom_style_data = parse_style(_xml.attributes.style)
+            # FIXME apply built-in attributes (style, class, id, etc)
+        
         for c in _xml.children:
             var cs = from_xmlnode(c, default_script)
             if cs is Array:
                 for cd in cs:
-                    doc.add_child(cd)
+                    node.add_child(cd)
             else:
-                doc.add_child(cs)
-        return doc
+                node.add_child(cs)
+        return node
 
 static func preprocess_style(text : String):
     var i = 0
@@ -197,8 +224,6 @@ static func parse_document(doc : String):
         
         var type = xml.get_node_type()
         
-        #print(xml.get_node_name(), " ", xml.get_node_type())
-        
         var node = null
         if type == XMLParser.NODE_ELEMENT:
             node = XMLNode.new()
@@ -209,7 +234,6 @@ static func parse_document(doc : String):
             
             if xml.is_empty():
                 var name = xml.get_node_name()
-                #print("empty... ", name)
                 node.name = name
                 current.children.push_back(node)
                 continue
@@ -224,20 +248,25 @@ static func parse_document(doc : String):
                 if name != "br": # special case
                     stack.push_back(current)
                     current = node
+                if name == "node":
+                    previous_text = ""
             XMLParser.NODE_ELEMENT_END:
                 var name = xml.get_node_name()
                 if name == "" or name == current.name:
                     current = stack.pop_back()
                 else:
                     print_debug("parse error; non-matching closing tag (" + name + " vs " + current.name + ")")
+                if name == "node":
+                    previous_text = ""
             XMLParser.NODE_TEXT:
                 var text = xml.get_node_data()
                 node = XMLNode.new()
                 var new_text = text.strip_edges(true, false)
-                if previous_text != "" and !previous_text.ends_with(" ") and new_text != text:
-                    new_text = " " + new_text
+                if new_text != text:
+                    if !previous_text.ends_with(" "):
+                        new_text = " " + new_text
                 text = new_text
-                new_text = text.strip_edges(true, false)
+                new_text = text.strip_edges(false, true)
                 if new_text != text and new_text != "":
                     text += " "
                 node.text = text
@@ -356,27 +385,37 @@ static func parse_style_rule(text : String, i : int):
     else:
         return null
 
+
+static func parse_style_rules(text : String, i : int):
+    var rules = []
+    while i < text.length():
+        var rule = parse_style_rule(text, i)
+        if rule != null:
+            print("got rule ", rule[0].prop, rule[0].values, rule[1])
+            rules.push_back(rule[0])
+            i = rule[1]
+        else:
+            #print("no rule")
+            var f = text.find("}", i)
+            if f >= 0:
+                i = f+1
+            break
+    return [rules, i]
+
 static func parse_style_target(text : String, i : int):
     var f = text.find("{", i)
     if f > 0:
         var target_str : String = text.substr(i, f-i)
         var targets = target_str.split(",")
+        for j in targets.size():
+            targets[j] = targets[j].strip_edges()
         i = f+1
-        var rules = []
-        while i < text.length():
-            var rule = parse_style_rule(text, i)
-            if rule != null:
-                print("got rule ", rule[0].prop, rule[0].values, rule[1])
-                rules.push_back(rule[0])
-                i = rule[1]
-            else:
-                #print("no rule")
-                f = text.find("}", i)
-                if f >= 0:
-                    i = f+1
-                break
-        for i in targets.size():
-            targets[i] = targets[i].strip_edges()
+        
+        var data = parse_style_rules(text, i)
+        var rules = data[0]
+        i = data[1]
+        
+        
         var ret = StyleRuleset.new()
         ret.targets = targets
         ret.rules = rules
