@@ -252,7 +252,12 @@ static func parse_document(doc : String):
                     previous_text = ""
             XMLParser.NODE_ELEMENT_END:
                 var name = xml.get_node_name()
-                if name == "" or name == current.name:
+                if (name == "ruby" and current.name == "rt"
+                    and stack.size() >= 2
+                    and stack.back().name == "ruby"): # special case
+                    current = stack.pop_back()
+                    current = stack.pop_back()
+                elif name == "" or name == current.name:
                     current = stack.pop_back()
                 else:
                     print_debug("parse error; non-matching closing tag (" + name + " vs " + current.name + ")")
@@ -391,7 +396,7 @@ static func parse_style_rules(text : String, i : int):
     while i < text.length():
         var rule = parse_style_rule(text, i)
         if rule != null:
-            print("got rule ", rule[0].prop, rule[0].values, rule[1])
+            #print("got rule ", rule[0].prop, rule[0].values, rule[1])
             rules.push_back(rule[0])
             i = rule[1]
         else:

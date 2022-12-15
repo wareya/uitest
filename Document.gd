@@ -15,8 +15,8 @@ var calculated_props = {
     "margin_top": 0,
     "margin_bottom": 0,
     
-    "offset_x" : 0,
-    "offset_y" : 0,
+    "offset_x": 0,
+    "offset_y": 0,
     
     "vertical_align": "bottom",
     "font_family": preload("res://font/Andika-Regular.ttf"),
@@ -28,7 +28,13 @@ var calculated_props = {
     "background_9patch_right": 0,
     "font_size": 24,
     
-    "layout" : "flow_h_lr", # or vertical, or horizontal
+    "layout": "flow_h_lr",
+    
+    "justify": "left",
+    
+    "width": null,
+    "max_width": null,
+    "min_width": null,
 }
 
 var font_cache = {}
@@ -56,6 +62,8 @@ export var style = ""
 
 var markup = """
 there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
+<br>
+a majesty beyond all <ruby>possibility<rt>fathom</ruby> awaits us
 """
 
 var stylesheet = """
@@ -78,6 +86,7 @@ root {
     background: "res://9PatchGradient.tres";
     margin_left: 5;
     margin_right: 5;
+    margin_top: 5;
     padding_top: 8;
     padding_left: 8;
     padding_bottom: 8;
@@ -90,6 +99,18 @@ root {
 }
 fun {
     background: "res://9PatchGradient2.tres";
+}
+ruby {
+    justify: center;
+    display: inline-block;
+    background: "res://9PatchGradient2.tres";
+}
+rt {
+    justify: center;
+    display: float;
+    offset_y: -8;
+    font_size: 12;
+    width: 100%;
 }
 """
 
@@ -170,11 +191,19 @@ func _process(delta):
 func from_xml(xml : String):
     return DocumentHelpers.from_xmlnode(DocumentHelpers.parse_document(xml), get_script())
 
+signal rejustify
+
+var to_rejustify = []
+func do_rejustify(real_width):
+    pass
+
 var max_descent = 0
 var max_ascent = 0
-func _reflow_row(row : Array, top : float, bottom : float):
+func _reflow_row(row : Array, top : float, bottom : float, x_limit : float):
     max_descent = 0
     max_ascent = 0
+    var min_x = 0
+    var max_x = 0
     for pair in row:
         var child : Control = pair[0]
         if child is Label:
@@ -184,7 +213,26 @@ func _reflow_row(row : Array, top : float, bottom : float):
         elif "calculated_props" in child:
             max_ascent  = max(max_ascent , child.max_ascent)
             max_descent = max(max_descent, child.max_descent)
+        var cursor = pair[1]
+        var size = pair[2]
+        var offset = pair[3]
+        if pair == row[0]:
+            min_x = cursor
+            max_x = cursor+size.x
+        else:
+            max_x = max(max_x, cursor + size.x)
     
+    var base_offset = 0
+    
+    var justify = calculated_props.justify
+    if justify == "left":
+        pass
+    elif justify == "right":
+        base_offset = x_limit - max_x
+    elif justify == "center":
+        base_offset = (x_limit - max_x)*0.5
+    
+    var i = 0
     for pair in row:
         var child : Control = pair[0]
         var x : float = pair[1]
@@ -218,17 +266,43 @@ func _reflow_row(row : Array, top : float, bottom : float):
                 offset.y += child.max_descent
         
         var origin = get_global_rect().position
-        child.set_global_position(Vector2(x, y) + offset + origin)
+        child.set_global_position(Vector2(x + base_offset, y) + offset + origin)
+        i += 1
         #child.rect_position = Vector2(x, y) + offset
     pass
 
+func calc_prop_x(child, property : String, x_limit : float):
+    var text = child.calculated_props[property]
+    if !text:
+        return null
+    if text.is_valid_float():
+        return text.to_float()
+    elif text.ends_with("%"):
+        return text.substr(0, text.length()-1).to_float()/100.0 * x_limit
+    return null
+    
+func calc_prop_width(child, default, x_limit : float):
+    var width = calc_prop_x(child, "width", x_limit)
+    if width == null:
+        width = default
+    var adjust = calc_prop_x(child, "max_width", x_limit)
+    if adjust != null:
+        width = max(width, adjust)
+    adjust = calc_prop_x(child, "min_width", x_limit)
+    if adjust != null:
+        width = min(width, adjust)
+    return width
+
+var layout_parent = null # FIXME prevent stale
 var show_self = true
 func reflow():
     #print("reflow of ", doc_name)
     font_cache = {}
     if doc_name == "root":
         calculate_style(null, style_data, font_cache)
+        layout_parent = null
     #print("sort...")
+    
     if calculated_props.layout == "flow_h_lr":
         var parent_size = get_parent_area_size()
         var size = Vector2()
@@ -236,10 +310,11 @@ func reflow():
         size.y = parent_size.y * (anchor_bottom - anchor_top)
         size.x -= calculated_props.margin_left + calculated_props.margin_right
         size.y -= calculated_props.margin_top + calculated_props.margin_bottom
-        var x_limit = size.x - calculated_props.padding_right - calculated_props.padding_left
+        var x_limit = size.x - calculated_props.padding_right
         var x_cursor = calculated_props.padding_left
         var y_cursor = calculated_props.padding_top
         var y_cursor_next = 0
+        var rows = []
         var row = []
         var process_nodes = []
         var check_queue = get_children()
@@ -277,11 +352,15 @@ func reflow():
             var child_size = child.get_combined_minimum_size()
             var offset = Vector2()
             if "calculated_props" in child:
-                #print("  >>")
+                child.layout_parent = self
                 child.reflow() # prevents size flickering when resized
-                #print("  <<")
                 child_size.x = max(child_size.x, child.rect_size.x)
                 child_size.y = max(child_size.y, child.rect_size.y)
+                child_size.x = calc_prop_width(child, child_size.x, x_limit)
+                
+                if child.calculated_props.width != null:
+                    print(child_size)
+                child.rect_size = child_size
                 
                 child_size.x += child.calculated_props.margin_left
                 child_size.x += child.calculated_props.margin_right
@@ -296,9 +375,14 @@ func reflow():
             
             #print(child, " ", child_size, " ", x_cursor, " ", y_cursor, "->", y_cursor_next, " ", x_limit)
             
-            
             if doc_name != "root" and calculated_props.display == "inline":
                 continue
+            
+            if "calculated_props" in child and child.calculated_props.display == "float":
+                var origin = get_global_rect().position
+                child.set_global_position(offset + origin)
+                continue
+            
             #print("--test")
             var new_row = false
             var force_next_row_new = false
@@ -309,7 +393,8 @@ func reflow():
                 force_next_row_new = true
             if new_row:
                 #print("--onto next row ", y_cursor, " ", y_cursor_next)
-                _reflow_row(row, y_cursor, y_cursor_next)
+                #_reflow_row(row, y_cursor, y_cursor_next, x_limit)
+                rows.push_back([row, y_cursor, y_cursor_next])
                 row = []
                 y_cursor = y_cursor_next
                 x_cursor = calculated_props.padding_left
@@ -327,14 +412,24 @@ func reflow():
                 x_cursor += child_size.x
         if row.size() > 0:
             #print("fallback ", y_cursor, " ", y_cursor_next)
-            _reflow_row(row, y_cursor, y_cursor_next)
+            #_reflow_row(row, y_cursor, y_cursor_next, x_limit)
+            rows.push_back([row, y_cursor, y_cursor_next])
             row = []
         
         rect_size.x = max_x + calculated_props.padding_right
+        if layout_parent:
+            rect_size.x = layout_parent.calc_prop_width(self, rect_size.x, x_limit)
         #print(rect_size.x)
         rect_size.y = y_cursor_next + calculated_props.padding_bottom
         if doc_name == "root":
-            rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_right)
+            rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_top)
+        
+        for data in rows:
+            var r_row = data[0]
+            var r_y_cursor = data[1]
+            var r_y_cursor_next = data[2]
+            _reflow_row(r_row, r_y_cursor, r_y_cursor_next, rect_size.x - calculated_props.padding_right)
+        
 
 func _draw():
     # TODO: track the styles of inlined nodes and apply them here, using canvas_item_set_custom_rect
