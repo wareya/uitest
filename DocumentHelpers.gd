@@ -19,6 +19,19 @@ static func can_break(c : String):
         (codepoint >= 0x30000 and codepoint <= 0x3134F)
     )
 
+static func can_break_after(c : String):
+    if c in "—-":
+        return true
+    else:
+        return false
+
+static func _to_val(val, node, name):
+    if val is String and val.begins_with("res://"):
+        val = load(val)
+    elif not node.get(name) is String:
+        val = str2var(val)
+    return val
+
 static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script):
     if _xml.text != "":
         var words = []
@@ -35,12 +48,16 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
             if breakable:
                 words.push_back(word)
                 word = ""
+            elif can_break_after(c):
+                words.push_back(word)
+                word = ""
             prev_breakable = breakable
         # strip spaces
         var i = 0
         while i < words.size():
-            var new_chunk = words[i].strip_edges()
-            if new_chunk == "":
+            var new_word = words[i]
+            var new_chunk = new_word.strip_edges()
+            if new_chunk == "" and new_chunk != new_word:
                 new_chunk = " "
             words[i] = new_chunk
             i += 1
@@ -49,6 +66,8 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
         while i+1 < words.size():
             if words[i] == " " and words[i+1] == " ":
                 words.remove(i+1)
+            elif words[i] == "":
+                words.remove(i)
             else:
                 i += 1
         # weld spaces to previous word
@@ -91,11 +110,15 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
                 if a_name == "type" or not a_name in node:
                     continue
                 var a_val = _xml.attributes[a_name]
-                if a_val is String and a_val.begins_with("res://"):
-                    a_val = load(a_val)
-                elif not node.get(a_name) is String:
-                    a_val = str2var(a_val)
-                node.set(a_name, a_val)
+                if a_val is Array:
+                    var array = []
+                    for val in a_val:
+                        val = _to_val(val, node, a_name)
+                        array.push_back(val)
+                    node.set(a_name, array)
+                else:
+                    a_val = _to_val(a_val, node, a_name)
+                    node.set(a_name, a_val)
         else:
             node = default_script.new()
             node.doc_name = _xml.name
@@ -126,7 +149,11 @@ static func preprocess_style(text : String):
     while i < text.length():
         var c = text[i]
         i += 1
-        if in_escape:
+        if in_comment:
+            if c == "\n":
+                in_comment = false
+                text_out += c
+        elif in_escape:
             in_escape = false
             text_out += c
         elif c == "\\":
@@ -142,10 +169,6 @@ static func preprocess_style(text : String):
             text_out += c
         elif c == "/" and i < text.length() and text[i] == "/":
             in_comment = true
-        elif in_comment:
-            if c == "\n":
-                in_comment = false
-                text_out += c
         else:
             text_out += c
     return text_out
@@ -281,7 +304,7 @@ static func parse_document(doc : String):
             _:
                 continue
     
-    print(root.to_string())
+    #print(root.to_string())
     return root
 
 class StyleRule extends Reference:
@@ -351,7 +374,7 @@ static func parse_style_rule(text : String, i : int):
             else:
                 if c == "'" or c == '"':
                     in_string = c
-                elif c.strip_edges() == "" or c == ";" or c == "}":
+                elif c.strip_edges() == "" or c == ";" or c == "}" or c == ",":
                     if rule_string != "":
                         rule_string = rule_string.strip_edges()
                         if rule_string.is_valid_float():

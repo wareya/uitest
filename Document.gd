@@ -19,7 +19,7 @@ var calculated_props = {
     "offset_y": 0,
     
     "vertical_align": "bottom",
-    "font_family": preload("res://font/Andika-Regular.ttf"),
+    "font_family": [preload("res://font/Andika-Regular.ttf"), preload("res://font/SawarabiGothic-Regular.ttf")],
     "background": null,
     "background_9patch" : false,
     "background_9patch_top": 0,
@@ -39,12 +39,13 @@ var calculated_props = {
 
 var font_cache = {}
 
-func make_font(data : DynamicFontData, size : float):
+func make_font(data : Array, size : float):
+    var font_data : DynamicFontData = data[0]
     var font_name = str(data) + " size: " + str(size)
     if font_name in font_cache:
         return font_cache[font_name]
     var font = DynamicFont.new()
-    font.font_data = data
+    font.font_data = font_data
     font.size = size
     font_cache[font_name] = font
     return font
@@ -61,9 +62,12 @@ var id_to_node = {}
 export var style = ""
 
 var markup = """
-there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
+there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew-it-all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
 <br>
-a majesty beyond all <ruby>possibility<rt>fathom</ruby> awaits us
+<br>
+A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live—which is to say, not <ruby>everlasting<rt>permanent</ruby> in the slightest.
+<br>
+ここから何をしたら<ruby>最後<rt>エンド</ruby>まで歩きつづけるのでしょうか。
 """
 
 var stylesheet = """
@@ -77,7 +81,7 @@ big {
 }
 b {
     display: inline;
-    font_family: "res://font/Andika-Bold.ttf";
+    font_family: "res://font/Andika-Bold.ttf", "res://font/SawarabiGothic-Regular.ttf";
 }
 br {
     display: block;
@@ -103,12 +107,11 @@ fun {
 ruby {
     justify: center;
     display: inline-block;
-    background: "res://9PatchGradient2.tres";
+    padding_top: 8;
 }
 rt {
     justify: center;
     display: float;
-    offset_y: -8;
     font_size: 12;
     width: 100%;
 }
@@ -120,6 +123,7 @@ var custom_style_data = []
 var visible_characters : float = -1.0 # TODO implement
 
 const _inherited_props = ["font_family", "font_size"]
+const _always_array_props = ["font_family"]
 func calculate_style(parent_props, style_data : Array, _font_cache):
     font_cache = _font_cache
     if parent_props:
@@ -143,9 +147,12 @@ func calculate_style(parent_props, style_data : Array, _font_cache):
             var rule : DocumentHelpers.StyleRule = _rule
             if rule.values == ["inherit"] and parent_props:
                 calculated_props[rule.prop] = parent_props[rule.prop]
-            if rule.values.size() == 1:
-                var val = rule.values[0]
-                calculated_props[rule.prop] = val
+            if rule.values.size() > 1 or rule.prop in _always_array_props:
+                calculated_props[rule.prop] = rule.values
+                pass
+            else:
+                calculated_props[rule.prop] = rule.values[0]
+                pass
             #print("!%*@: ", rule.values)
     
     for k in assigned_props.keys():
@@ -155,8 +162,18 @@ func calculate_style(parent_props, style_data : Array, _font_cache):
         if child.has_method("calculate_style"):
             child.calculate_style(calculated_props, style_data, font_cache)
         elif child is Label or child is Button:
-            var font = make_font(calculated_props.font_family, calculated_props.font_size)
-            child.add_font_override("font", font)
+            print(calculated_props.font_family)
+            if calculated_props.font_family is Array and calculated_props.font_family.size() > 0:
+                var fonts = []
+                var base_font : DynamicFont = null
+                var latest_font_data : DynamicFontData = null
+                for font_data in calculated_props.font_family:
+                    if base_font == null:
+                        base_font = make_font(calculated_props.font_family, calculated_props.font_size)
+                    else:
+                        base_font.add_fallback(font_data)
+                    latest_font_data = font_data
+                child.add_font_override("font", base_font)
 
 func _init():
     anchor_right = 1
@@ -297,7 +314,7 @@ var layout_parent = null # FIXME prevent stale
 var show_self = true
 func reflow():
     #print("reflow of ", doc_name)
-    font_cache = {}
+    font_cache.clear()
     if doc_name == "root":
         calculate_style(null, style_data, font_cache)
         layout_parent = null
@@ -368,7 +385,8 @@ func reflow():
                 child_size.y += child.calculated_props.margin_top
                 child_size.y += child.calculated_props.margin_bottom
                 
-                offset = Vector2(child.calculated_props.padding_left, child.calculated_props.padding_top)
+                #offset = Vector2(child.calculated_props.padding_left, child.calculated_props.padding_top)
+                offset = Vector2(child.calculated_props.padding_left, 0)
                 offset.x += child.calculated_props.offset_x
                 offset.y += child.calculated_props.offset_y
                 #print(offset)
