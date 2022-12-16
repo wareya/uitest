@@ -3,8 +3,14 @@ extends Container
 class_name Document
 
 var calculated_props = {
-    "display": "inline-block", # or block, or inline, or (TODO) absolute
+    "display": "inline-block", # or block, or inline, or float
+    # NOTE: float DOES NOT work ANYTHING like how float:left/right work in HTML/CSS.
+    # float just removes the element from flow layout so that it can be positioned
+    # relative to the layout cursor with offset_x and offset_y.
+    # NOTE2: inline elements are not rendered, only their children. their children are treated
+    # by layout algorithms as existing within the parent of the inline element.
     
+    # numbers only
     "padding_left": 0,
     "padding_right": 0,
     "padding_top": 0,
@@ -18,6 +24,7 @@ var calculated_props = {
     "offset_x": 0,
     "offset_y": 0,
     
+    # bottom, middle, top
     "vertical_align": "bottom",
     "font_family": [preload("res://font/Andika-Regular.ttf"), preload("res://font/SawarabiGothic-Regular.ttf")],
     "background": null,
@@ -26,12 +33,20 @@ var calculated_props = {
     "background_9patch_bottom": 0,
     "background_9patch_left": 0,
     "background_9patch_right": 0,
-    "font_size": 24,
     
-    "layout": "flow_h_lr",
+    "background_offset_top": 0,
+    "background_offset_bottom": 0,
+    "background_offset_left": 0,
+    "background_offset_right": 0,
     
+    "font_size": 16,
+    
+    "layout": "flow_h_lr", # TODO: implement other flow models
+    
+    # left, right, center, or justified
     "justify": "left",
     
+    # number or percent, e.g. 512 or "50%". no units.
     "width": null,
     "max_width": null,
     "min_width": null,
@@ -59,10 +74,10 @@ var doc_id = ""
 var doc_class = []
 var id_to_node = {}
 
-export var style = ""
+export(String, MULTILINE) var custom_stylesheet = ""
 
-var markup = """
-there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew-it-all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
+export(String, MULTILINE) var markup = \
+"""there <span> once </span> was <fun>a man</fun> from <img src="res://icon.png"/> who knew-it-all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type="Button" text="Look! A button!"></node> ran </b>
 <br>
 <br>
 A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live—which is to say, not <ruby>everlasting<rt>permanent</ruby> in the slightest.
@@ -70,14 +85,13 @@ A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live
 ここから何をしたら<ruby>最後<rt>エンド</ruby>まで歩きつづけるのでしょうか。
 """
 
-var stylesheet = """
+var default_stylesheet = """
 span {
     display: inline;
-    font_size: 32;
 }
 big {
     display: inline;
-    font_size: 32;
+    font_size: 150%;
 }
 b {
     display: inline;
@@ -86,11 +100,27 @@ b {
 br {
     display: block;
 }
-root {
+ruby {
+    justify: center;
+    display: inline-block;
+    padding_top: 4;
+}
+rt {
+    justify: center;
+    display: float;
+    font_size: 65%;
+    width: 100%;
+    offset_y: -4;
+}
+"""
+
+export(String, MULTILINE) var root_stylesheet = \
+"""root {
     background: "res://9PatchGradient.tres";
     margin_left: 5;
     margin_right: 5;
     margin_top: 5;
+    margin_bottom: 5;
     padding_top: 8;
     padding_left: 8;
     padding_bottom: 8;
@@ -104,33 +134,27 @@ root {
 fun {
     background: "res://9PatchGradient2.tres";
 }
-ruby {
-    justify: center;
-    display: inline-block;
-    padding_top: 8;
-}
-rt {
-    justify: center;
-    display: float;
-    font_size: 12;
-    width: 100%;
-}
 """
 
+var default_style_data = []
 var style_data = []
 var custom_style_data = []
 
+func _ready():
+    custom_style_data = DocumentHelpers.parse_style(custom_stylesheet)
+
 var visible_characters : float = -1.0 # TODO implement
 
-const _inherited_props = ["font_family", "font_size"]
-const _always_array_props = ["font_family"]
-func calculate_style(parent_props, style_data : Array, _font_cache):
+export var _inherited_props = ["font_family", "font_size", "justify"]
+var _always_array_props = ["font_family"]
+func calculate_style(parent_props, fed_style_data : Array, _font_cache):
+    fed_style_data += style_data
     font_cache = _font_cache
     if parent_props:
         for i in _inherited_props:
             calculated_props[i] = parent_props[i]
     
-    for ruleset in style_data + custom_style_data:
+    for ruleset in default_style_data + fed_style_data + custom_style_data:
         var valid_target = false
         for target in ruleset.targets:
             if target == doc_name:
@@ -158,11 +182,19 @@ func calculate_style(parent_props, style_data : Array, _font_cache):
     for k in assigned_props.keys():
         calculated_props[k] = assigned_props[k]
     
+    var fs = calculated_props.font_size
+    if fs is String and fs.ends_with("%"):
+        print(fs)
+        var percent = fs.substr(0, fs.length()-1).to_float()
+        calculated_props.font_size = parent_props.font_size * percent * 0.01
+    else:
+        print(fs)
+    
     for child in get_children():
         if child.has_method("calculate_style"):
-            child.calculate_style(calculated_props, style_data, font_cache)
+            child.calculate_style(calculated_props, fed_style_data + custom_style_data, font_cache)
         elif child is Label or child is Button:
-            print(calculated_props.font_family)
+            #print(calculated_props.font_family)
             if calculated_props.font_family is Array and calculated_props.font_family.size() > 0:
                 var fonts = []
                 var base_font : DynamicFont = null
@@ -193,17 +225,19 @@ var time = 0
 func _process(delta):
     time += delta
     if Input.is_action_just_pressed("ui_accept") and is_inside_tree() and self == get_tree().current_scene:
-        var style_data = DocumentHelpers.parse_style(stylesheet)
+        var default_style_data = DocumentHelpers.parse_style(default_stylesheet)
+        var style_data = DocumentHelpers.parse_style(root_stylesheet)
         var scene = from_xml(markup)
         get_tree().current_scene.queue_free()
         get_tree().get_root().add_child(scene)
         get_tree().current_scene = scene
         scene.queue_sort()
+        scene.default_style_data = default_style_data
         scene.style_data = style_data
     # performance test
     #if is_inside_tree() and self == get_tree().current_scene:
     #    print("asdf")
-    #    anchor_right = lerp(0.25, 1.0, tri(time*8)/2+0.5)
+    #    anchor_right = lerp(0.25, 1.0, tri(time)/2+0.5)
 
 func from_xml(xml : String):
     return DocumentHelpers.from_xmlnode(DocumentHelpers.parse_document(xml), get_script())
@@ -216,7 +250,7 @@ func do_rejustify(real_width):
 
 var max_descent = 0
 var max_ascent = 0
-func _reflow_row(row : Array, top : float, bottom : float, x_limit : float):
+func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrapped):
     max_descent = 0
     max_ascent = 0
     var min_x = 0
@@ -240,14 +274,21 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float):
             max_x = max(max_x, cursor + size.x)
     
     var base_offset = 0
+    var gap_offset = 0
     
     var justify = calculated_props.justify
+    if !wrapped and justify == "justified":
+        justify = "left"
+    
     if justify == "left":
         pass
     elif justify == "right":
         base_offset = x_limit - max_x
     elif justify == "center":
         base_offset = (x_limit - max_x)*0.5
+        print(x_limit, " ", max_x)
+    elif justify == "justified":
+        gap_offset += (x_limit - max_x)/row.size()
     
     var i = 0
     for pair in row:
@@ -281,6 +322,8 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float):
             else:
                 offset.y -= max_descent
                 offset.y += child.max_descent
+        
+        offset.x += gap_offset*i
         
         var origin = get_global_rect().position
         child.set_global_position(Vector2(x + base_offset, y) + offset + origin)
@@ -316,7 +359,7 @@ func reflow():
     #print("reflow of ", doc_name)
     font_cache.clear()
     if doc_name == "root":
-        calculate_style(null, style_data, font_cache)
+        calculate_style(null, default_style_data + style_data, font_cache)
         layout_parent = null
     #print("sort...")
     
@@ -412,7 +455,7 @@ func reflow():
             if new_row:
                 #print("--onto next row ", y_cursor, " ", y_cursor_next)
                 #_reflow_row(row, y_cursor, y_cursor_next, x_limit)
-                rows.push_back([row, y_cursor, y_cursor_next])
+                rows.push_back([row, y_cursor, y_cursor_next, !force_next_row_new])
                 row = []
                 y_cursor = y_cursor_next
                 x_cursor = calculated_props.padding_left
@@ -431,7 +474,7 @@ func reflow():
         if row.size() > 0:
             #print("fallback ", y_cursor, " ", y_cursor_next)
             #_reflow_row(row, y_cursor, y_cursor_next, x_limit)
-            rows.push_back([row, y_cursor, y_cursor_next])
+            rows.push_back([row, y_cursor, y_cursor_next, false])
             row = []
         
         rect_size.x = max_x + calculated_props.padding_right
@@ -446,7 +489,8 @@ func reflow():
             var r_row = data[0]
             var r_y_cursor = data[1]
             var r_y_cursor_next = data[2]
-            _reflow_row(r_row, r_y_cursor, r_y_cursor_next, rect_size.x - calculated_props.padding_right)
+            var r_wrapped = data[3]
+            _reflow_row(r_row, r_y_cursor, r_y_cursor_next, rect_size.x - calculated_props.padding_right, r_wrapped)
         
 
 func _draw():
@@ -458,12 +502,21 @@ func _draw():
         var canvas = get_canvas()
         var canvas_item = get_canvas_item()
         var bg_size = bg.get_size()
+        var bg_rect_start = Vector2()
+        var bg_rect_end = rect_size
+        
+        bg_rect_start.x += calculated_props.background_offset_left
+        bg_rect_start.y += calculated_props.background_offset_top
+        bg_rect_end.x   += calculated_props.background_offset_right
+        bg_rect_end.y   += calculated_props.background_offset_bottom
+        
+        var bg_rect = Rect2(bg_rect_start, bg_rect_end)
         if calculated_props.background_9patch:
             var top    = calculated_props.background_9patch_top
             var bottom = calculated_props.background_9patch_bottom
             var left   = calculated_props.background_9patch_left
             var right  = calculated_props.background_9patch_right
-            VisualServer.canvas_item_add_nine_patch(canvas_item, Rect2(Vector2(), rect_size), Rect2(Vector2(), bg_size), bg.get_rid(), Vector2(left, top), Vector2(right, bottom))
+            VisualServer.canvas_item_add_nine_patch(canvas_item, bg_rect, Rect2(Vector2(), bg_size), bg.get_rid(), Vector2(left, top), Vector2(right, bottom))
         else:
-            VisualServer.canvas_item_add_texture_rect(canvas_item, Rect2(Vector2(), rect_size), bg.get_rid(), true)
+            VisualServer.canvas_item_add_texture_rect(canvas_item, bg_rect, bg.get_rid(), true)
     pass
