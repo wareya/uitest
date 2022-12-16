@@ -171,7 +171,54 @@ var custom_style_data = []
 func _ready():
     custom_style_data = DocumentHelpers.parse_style(custom_stylesheet)
 
-var visible_characters : float = -1.0 # TODO implement
+export var visible_characters : float = -1.0 setget set_visible_characters
+
+func _get_children_recursively(parent : Node, float_filter = false):
+    if float_filter and "calculated_props" in parent and parent.calculated_props.display == "float":
+        return []
+    var children = []
+    for child in parent.get_children():
+        children.push_back(child)
+        children.append_array(_get_children_recursively(child, float_filter))
+    return children
+
+func get_logical_characters():
+    var count = 0
+    for child in _get_children_recursively(self, true):
+        if child is Label or child is RichTextLabel:
+            var char_count = child.get_total_character_count()
+            if child is Label and child.text.ends_with(" "):
+                char_count += 1
+            count += char_count
+        elif child is CanvasItem:
+            # FIXME: count the roots of groups of nodes with no labels as 1 characters
+            pass
+
+func set_visible_characters(new_visible : float):
+    visible_characters = new_visible
+    var visible_now = int(floor(visible_characters))
+    var all_visible = visible_now < 0
+    for child in _get_children_recursively(self, true):
+        if child is Label or child is RichTextLabel:
+            if all_visible:
+                child.visible_characters = -1
+            elif visible_now >= 0:
+                child.visible_characters = visible_now
+                var char_count = child.get_total_character_count()
+                if child is Label and child.text.ends_with(" "):
+                    char_count += 1
+                visible_now -= char_count
+            else:
+                child.visible_characters = 0
+        elif child is CanvasItem:
+            if all_visible:
+                child.modulate.a = 1.0
+            elif visible_now >= 0:
+                child.modulate.a = 1.0
+                # FIXME: count the roots of groups of nodes with no labels as 1 characters
+            else:
+                child.modulate.a = 0.0
+
 
 func _is_var(val, vars : Dictionary):
     return val is String and val.begins_with("var(") and val.ends_with(")")
@@ -315,7 +362,6 @@ func _process(delta):
         scene.style_data = style_data
     # performance test
     #if is_inside_tree() and self == get_tree().current_scene:
-    #    print("asdf")
     #    anchor_right = lerp(0.25, 1.0, tri(time)/2+0.5)
 
 func from_xml(xml : String):

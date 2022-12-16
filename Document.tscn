@@ -9,9 +9,6 @@
 [sub_resource type="DynamicFont" id=1]
 font_data = ExtResource( 3 )
 fallback/0 = ExtResource( 5 )
-fallback/1 = ExtResource( 5 )
-fallback/2 = ExtResource( 5 )
-fallback/3 = ExtResource( 5 )
 
 [node name="Document" type="Container"]
 anchor_right = 1.0
