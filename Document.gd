@@ -54,14 +54,34 @@ var calculated_props = {
 
 var font_cache = {}
 
-func make_font(data : Array, size : float):
-    var font_data : DynamicFontData = data[0]
-    var font_name = str(data) + " size: " + str(size)
+func make_font(font_list : Array, size : float):
+    #if size < 16:
+    #    print(font_list + [size])
+    if font_list.size() < 0:
+        return null
+    var base_data = font_list[0]
+    for font_data in calculated_props.font_family:
+        if not font_data is DynamicFontData:
+            continue
+        base_data = font_data
+        break
+    var font_data : DynamicFontData = base_data
+    var font_name = str(font_list) + " size: " + str(size)
     if font_name in font_cache:
         return font_cache[font_name]
     var font = DynamicFont.new()
     font.font_data = font_data
     font.size = size
+    
+    for data in font_list:
+        if not font_data is DynamicFontData:
+            continue
+        if data == font.font_data:
+            continue
+        else:
+            font.add_fallback(data)
+            #print("adding a fallback of ", data, " ", data.font_path)
+    
     font_cache[font_name] = font
     return font
 
@@ -108,7 +128,8 @@ ruby {
 rt {
     justify: center;
     display: float;
-    font_size: 65%;
+    font_size: var(--rubysize);
+    font_family: var(--rubyfont);
     width: 100%;
     offset_y: -4;
 }
@@ -131,6 +152,13 @@ export(String, MULTILINE) var root_stylesheet = \
     background_9patch_left: 6;
     background_9patch_right: 6;
 }
+:vars {
+    --white: "#FFFFFF";
+    --rubysize: 65%;
+    --rubyfont: var(--englishfont) var(--japanesefont);
+    --japanesefont: "res://font/SawarabiGothic-Regular.ttf";
+    --englishfont: "res://font/Andika-Regular.ttf";
+}
 fun {
     background: "res://9PatchGradient2.tres";
 }
@@ -145,6 +173,53 @@ func _ready():
 
 var visible_characters : float = -1.0 # TODO implement
 
+func _is_var(val, vars : Dictionary):
+    return val is String and val.begins_with("var(") and val.ends_with(")")
+
+func _flatten_style_var(values : Array, vars : Dictionary):
+    values = values.duplicate()
+    var max_insertions = 16
+    var i = 0
+    var seen_names_at = {}
+    while i < values.size() and max_insertions > 0:
+        if not i in seen_names_at:
+            seen_names_at[i] = {}
+        var name = ""
+        var val = values[i]
+        var found_var = false
+        if _is_var(val, vars):
+            val = val.substr(4, val.length()-5).replace("-", "_")
+            name = val
+            if not val in vars:
+                break
+            if val in seen_names_at[i]:
+                break
+            val = vars[val]
+            found_var = true
+        
+        if found_var:
+            max_insertions -= 1
+            max_insertions -= 1
+            if val is Array:
+                var oldvalues = values
+                values.remove(i)
+                var begin = values.slice(0, i-1)
+                var end = values.slice(i, values.size()-1)
+                values = begin + val + end
+                #print("performing insertion lookup for ", name, "\n", oldvalues, "\n", values, "\n", begin, " - ", end, " - ", i)
+            else:
+                values[i] = val
+                #print("performing replacement lookup for ", name)
+        else:
+            if _is_var(val, vars):
+                #print("skipping lookup for ", name)
+                pass
+            i += 1
+    #if max_insertions < 16:
+    #    print("\nfinal ", values)
+    #    pass
+    return values
+
 export var _inherited_props = ["font_family", "font_size", "justify"]
 var _always_array_props = ["font_family"]
 func calculate_style(parent_props, fed_style_data : Array, _font_cache):
@@ -153,6 +228,16 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
     if parent_props:
         for i in _inherited_props:
             calculated_props[i] = parent_props[i]
+    
+    var vars = {}
+    
+    for ruleset in default_style_data + fed_style_data + custom_style_data:
+        var valid_target = false
+        for target in ruleset.targets:
+            #print(target)
+            if target == ":vars":
+                for rule in ruleset.rules:
+                    vars[rule.prop] = rule.values
     
     for ruleset in default_style_data + fed_style_data + custom_style_data:
         var valid_target = false
@@ -169,13 +254,14 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
             continue
         for _rule in ruleset.rules:
             var rule : DocumentHelpers.StyleRule = _rule
-            if rule.values == ["inherit"] and parent_props:
+            var values = _flatten_style_var(rule.values, vars)
+            if values == ["inherit"] and parent_props:
                 calculated_props[rule.prop] = parent_props[rule.prop]
-            if rule.values.size() > 1 or rule.prop in _always_array_props:
-                calculated_props[rule.prop] = rule.values
+            elif values.size() > 1 or rule.prop in _always_array_props:
+                calculated_props[rule.prop] = values
                 pass
             else:
-                calculated_props[rule.prop] = rule.values[0]
+                calculated_props[rule.prop] = values[0]
                 pass
             #print("!%*@: ", rule.values)
     
@@ -184,11 +270,8 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
     
     var fs = calculated_props.font_size
     if fs is String and fs.ends_with("%"):
-        print(fs)
         var percent = fs.substr(0, fs.length()-1).to_float()
         calculated_props.font_size = parent_props.font_size * percent * 0.01
-    else:
-        print(fs)
     
     for child in get_children():
         if child.has_method("calculate_style"):
@@ -197,15 +280,11 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
             #print(calculated_props.font_family)
             if calculated_props.font_family is Array and calculated_props.font_family.size() > 0:
                 var fonts = []
-                var base_font : DynamicFont = null
-                var latest_font_data : DynamicFontData = null
-                for font_data in calculated_props.font_family:
-                    if base_font == null:
-                        base_font = make_font(calculated_props.font_family, calculated_props.font_size)
-                    else:
-                        base_font.add_fallback(font_data)
-                    latest_font_data = font_data
+                var base_font : DynamicFont = make_font(calculated_props.font_family, calculated_props.font_size)
                 child.add_font_override("font", base_font)
+                #print(base_font)
+                #for i in base_font.get_fallback_count():
+                #    print(base_font.get_fallback(i))
 
 func _init():
     anchor_right = 1
@@ -286,7 +365,7 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrap
         base_offset = x_limit - max_x
     elif justify == "center":
         base_offset = (x_limit - max_x)*0.5
-        print(x_limit, " ", max_x)
+        #print(x_limit, " ", max_x)
     elif justify == "justified":
         gap_offset += (x_limit - max_x)/row.size()
     
@@ -418,8 +497,8 @@ func reflow():
                 child_size.y = max(child_size.y, child.rect_size.y)
                 child_size.x = calc_prop_width(child, child_size.x, x_limit)
                 
-                if child.calculated_props.width != null:
-                    print(child_size)
+                #if child.calculated_props.width != null:
+                #    print(child_size)
                 child.rect_size = child_size
                 
                 child_size.x += child.calculated_props.margin_left

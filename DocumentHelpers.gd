@@ -2,6 +2,8 @@ tool
 extends Container
 class_name DocumentHelpers
 
+
+
 static func can_break(c : String):
     if c == " " or c == "\n" or c == "\t":
         return true
@@ -338,6 +340,7 @@ static func parse_style_rule(text : String, i : int):
     var rule_name : String = ""
     var rule_data = []
     var rule_string = ""
+    var end_of_ruleset = false
     while i < text.length():
         var c = text[i]
         i += 1
@@ -385,6 +388,10 @@ static func parse_style_rule(text : String, i : int):
                             rule_string = true
                         rule_data.push_back(rule_string)
                         rule_string = ""
+                        if c == ",":
+                            rule_data.push_back(",")
+                    if c == "}":
+                        end_of_ruleset = true
                     if c == "}" or c == ";":
                         break
                 else:
@@ -409,7 +416,7 @@ static func parse_style_rule(text : String, i : int):
             var val = ret.values[j]
             if val is String and val.begins_with("res://"):
                 ret.values[j] = load(val)
-        return [ret, i]
+        return [ret, i, end_of_ruleset]
     else:
         return null
 
@@ -422,6 +429,8 @@ static func parse_style_rules(text : String, i : int):
             #print("got rule ", rule[0].prop, rule[0].values, rule[1])
             rules.push_back(rule[0])
             i = rule[1]
+            if rule[2]: # end of ruleset
+                break
         else:
             #print("no rule")
             var f = text.find("}", i)
