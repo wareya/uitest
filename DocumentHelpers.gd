@@ -1,8 +1,5 @@
 tool
-extends Container
 class_name DocumentHelpers
-
-
 
 static func can_break(c : String):
     if c == " " or c == "\n" or c == "\t":
@@ -33,6 +30,13 @@ static func _to_val(val, node, name):
     elif not node.get(name) is String:
         val = str2var(val)
     return val
+
+#class DocScrollContents extends Control:
+#    func _init():
+#        anchor_right = 1
+#        anchor_bottom = 1
+#    var show_self
+#    pass
 
 static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script):
     if _xml.text != "":
@@ -138,6 +142,9 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
                 style.rules = rules
                 node.custom_style_data = style
             # FIXME apply built-in attributes (style, class, id, etc)
+        
+        #var contents = DocScrollContents.new()
+        #node.add_child(contents)
         
         for c in _xml.children:
             var cs = from_xmlnode(c, default_script)

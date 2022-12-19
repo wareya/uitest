@@ -16,13 +16,14 @@ anchor_bottom = 1.0
 margin_right = -522.0
 margin_bottom = -536.0
 rect_min_size = Vector2( 502, 64 )
+rect_pivot_offset = Vector2( 1343, 79 )
 script = ExtResource( 1 )
 _inherited_props = [ "font_family", "font_size", "justify" ]
 
 [node name="Label" type="Label" parent="."]
 margin_top = 37.0
-margin_right = 458.0
-margin_bottom = 77.0
+margin_right = 307.0
+margin_bottom = 64.0
 custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "hit space (or whatever the confirm key is)"
@@ -38,8 +39,8 @@ stretch_mode = 3
 [node name="Label2" type="Label" parent="."]
 margin_left = 371.0
 margin_top = 37.0
-margin_right = 1676.0
-margin_bottom = 120.0
+margin_right = 421.0
+margin_bottom = 64.0
 custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "FSDJE "
@@ -55,8 +56,8 @@ texture = ExtResource( 4 )
 [node name="Label3" type="Label" parent="."]
 margin_left = 433.0
 margin_top = 37.0
-margin_right = 518.0
-margin_bottom = 77.0
+margin_right = 490.0
+margin_bottom = 64.0
 custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "sgfhdth"
@@ -66,6 +67,6 @@ percent_visible = -0.142857
 margin_left = 490.0
 margin_top = 31.0
 margin_right = 502.0
-margin_bottom = 77.0
+margin_bottom = 64.0
 custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )

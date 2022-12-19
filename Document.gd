@@ -55,6 +55,10 @@ var default_props = {
     "width": null,
     "max_width": null,
     "min_width": null,
+    
+    "height": null,
+    "max_height": null,
+    "min_height": null,
 }
 
 var calculated_props = default_props.duplicate()
@@ -166,6 +170,10 @@ export(String, MULTILINE) var root_stylesheet = \
     background_9patch_bottom: 6.5;
     background_9patch_left: 6;
     background_9patch_right: 6;
+    
+    overflow: scroll;
+    
+    max_height: 400;
 }
 :vars {
     --white: "#FFFFFF";
@@ -178,7 +186,7 @@ fun {
     background: "res://9PatchGradient2.tres";
     text_shadow_color: orange;
     text_shadow_offset: 0 0;
-    display: inline;
+    display: inline-block;
 }
 bruh fun {
     background: none;
@@ -194,8 +202,28 @@ var default_style_data = []
 var style_data = []
 var custom_style_data = []
 
+func _update_v_scroll(value : float):
+    var origin = get_global_rect().position
+    #child.set_global_position(Vector2(x + base_offset, y) + offset + origin)
+    #i += 1
+    #_content_memo[child] = child.get_global_rect().position - origin
+    var x_scroll = _h_scrollbar.value
+    var y_scroll = _v_scrollbar.value
+    for child in _content_memo:
+        var bluh = _content_memo[child]
+        child.set_global_position(origin + bluh - Vector2(x_scroll, y_scroll))
+        child.update()
+
+var _v_scrollbar = VScrollBar.new()
+var _h_scrollbar = HScrollBar.new()
 func _ready():
     custom_style_data = DocumentHelpers.parse_style(custom_stylesheet)
+    add_child(_v_scrollbar)
+    add_child(_h_scrollbar)
+    _v_scrollbar.visible = false
+    _h_scrollbar.visible = false
+    
+    _v_scrollbar.connect("value_changed", self, "_update_v_scroll")
 
 export var visible_characters : float = -1.0 setget set_visible_characters
 
@@ -340,6 +368,8 @@ func _target_list_matches(target_list : Array) -> bool:
         
         while parent != null:
             parent = parent.get_parent()
+            #if parent is DocumentHelpers.DocScrollContents:
+            #    parent = parent.get_parent()
             if parent != null and "calculated_props" in parent:
                 break
     
@@ -440,6 +470,8 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
             child.add_color_override("font_color", color)
 
 func _init():
+    #scroll_horizontal_enabled = false
+    #scroll_vertical_enabled = false
     anchor_right = 1
     anchor_bottom = 1
     
@@ -478,6 +510,8 @@ signal rejustify
 var to_rejustify = []
 func do_rejustify(real_width):
     pass
+
+var _content_memo = {}
 
 var max_descent = 0
 var max_ascent = 0
@@ -559,34 +593,51 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrap
         var origin = get_global_rect().position
         child.set_global_position(Vector2(x + base_offset, y) + offset + origin)
         i += 1
+        _content_memo[child] = child.get_global_rect().position - origin
         #child.rect_position = Vector2(x, y) + offset
     pass
 
-func calc_prop_x(child, property : String, x_limit : float):
-    var text = child.calculated_props[property]
+func calc_prop_percent(property : String, limit : float):
+    var text = calculated_props[property]
     if !text:
         return null
+    if text is float:
+        return text
     if text.is_valid_float():
         return text.to_float()
     elif text.ends_with("%"):
-        return text.substr(0, text.length()-1).to_float()/100.0 * x_limit
+        return text.substr(0, text.length()-1).to_float()/100.0 * limit
     return null
     
-func calc_prop_width(child, default, x_limit : float):
-    var width = calc_prop_x(child, "width", x_limit)
+func calc_prop_width(default, x_limit : float):
+    var width = calc_prop_percent("width", x_limit)
     if width == null:
         width = default
-    var adjust = calc_prop_x(child, "max_width", x_limit)
-    if adjust != null:
-        width = max(width, adjust)
-    adjust = calc_prop_x(child, "min_width", x_limit)
+    var adjust = calc_prop_percent("max_width", x_limit)
     if adjust != null:
         width = min(width, adjust)
+    adjust = calc_prop_percent("min_width", x_limit)
+    if adjust != null:
+        width = max(width, adjust)
     return width
+
+func calc_prop_height(default, y_limit : float):
+    var height = calc_prop_percent("height", y_limit)
+    if height == null:
+        height = default
+    var adjust = calc_prop_percent("max_height", y_limit)
+    if adjust != null:
+        height = min(height, adjust)
+    adjust = calc_prop_percent("min_height", y_limit)
+    if adjust != null:
+        height = max(height, adjust)
+    return height
 
 var layout_parent = null # FIXME prevent stale
 var show_self = true
 func reflow():
+    _content_memo = {}
+    
     #print("reflow of ", doc_name)
     font_cache.clear()
     if doc_name == "root":
@@ -596,6 +647,22 @@ func reflow():
     
     #rect_min_size = Vector2()
     
+    _h_scrollbar.visible = false
+    _v_scrollbar.visible = false
+    rect_clip_content = false
+    var overflow = calculated_props.overflow
+    if overflow == "scroll":
+        _h_scrollbar.visible = true
+        _v_scrollbar.visible = true
+        rect_clip_content = true
+    if overflow == "scroll_h":
+        _h_scrollbar.visible = true
+        rect_clip_content = true
+    if overflow == "scroll_v":
+        print("showing vsb")
+        _v_scrollbar.visible = true
+        rect_clip_content = true
+    
     if calculated_props.layout == "flow_h_lr":
         var parent_size = get_parent_area_size()
         #print(doc_name, parent_size)
@@ -604,21 +671,42 @@ func reflow():
         size.y = parent_size.y * (anchor_bottom - anchor_top)
         size.x -= calculated_props.margin_left + calculated_props.margin_right
         size.y -= calculated_props.margin_top + calculated_props.margin_bottom
+        var total_padding = Vector2(calculated_props.padding_right + calculated_props.padding_left, calculated_props.padding_top + calculated_props.padding_bottom)
         var x_limit = size.x - calculated_props.padding_right
+        var y_limit = size.y - calculated_props.padding_bottom
+        var x_buffer = 0
+        var y_buffer = 0
+        if _v_scrollbar.visible:
+            var extra_pad = calculated_props.padding_right + _v_scrollbar.rect_size.x
+            x_limit -= extra_pad
+            x_buffer += extra_pad
+        if _h_scrollbar.visible:
+            var extra_pad = calculated_props.padding_bottom + _h_scrollbar.rect_size.y
+            y_limit -= extra_pad
+            y_buffer += extra_pad
+        
         var x_cursor = calculated_props.padding_left
         var y_cursor = calculated_props.padding_top
         var y_cursor_next = 0
         var rows = []
         var row = []
         var process_nodes = []
-        var check_queue = get_children()
+        
+        var start = Vector2(x_cursor, y_cursor)
+        
+        #var intended_interior_size = Vector2(x_limit, y_limit) - start
         
         var max_x = 0
         
-        rect_size = size
-        rect_size.x -= calculated_props.padding_left
-        rect_size.x -= calculated_props.padding_right
+        rect_size = Vector2(x_limit, y_limit) - Vector2(x_cursor, y_cursor)
+        #rect_size.x -= calculated_props.padding_left
+        #rect_size.x -= calculated_props.padding_right
         
+        var check_queue = get_children()
+        #if check_queue.size() == 1 and check_queue[0] is DocumentHelpers.DocScrollContents:
+        #    check_queue[0].rect_size = interior_size
+        #    check_queue[0].rect_position = Vector2(x_cursor, y_cursor)
+        #    pass
         while check_queue.size() > 0:
             var _child = check_queue.pop_front()
             var _parent = self
@@ -629,9 +717,16 @@ func reflow():
                 continue
             if not _child.is_visible_in_tree():
                 continue
+            if _child == _v_scrollbar or _child == _h_scrollbar:
+                continue
             var child : Control = _child
             
+            var do_inline = false
             if "calculated_props" in child and child.calculated_props.display == "inline":
+                do_inline = true
+            #elif child is DocumentHelpers.DocScrollContents:
+            #    do_inline = true
+            if do_inline:
                 child.rect_clip_content = false
                 var etc = []
                 for c in child.get_children():
@@ -654,7 +749,7 @@ func reflow():
                 child.reflow() # prevents size flickering when resized
                 child_size.x = max(child_size.x, child.rect_size.x)
                 child_size.y = max(child_size.y, child.rect_size.y)
-                child_size.x = calc_prop_width(child, child_size.x, x_limit)
+                child_size.x = child.calc_prop_width(child_size.x, x_limit)
                 
                 #if child.calculated_props.width != null:
                 #    print(child_size)
@@ -715,17 +810,58 @@ func reflow():
             rows.push_back([row, y_cursor, y_cursor_next, false])
             row = []
         
-        rect_size.x = max_x + calculated_props.padding_right
-        if layout_parent:
-            rect_size.x = layout_parent.calc_prop_width(self, rect_size.x, x_limit)
-        #print(rect_size.x)
-        rect_size.y = y_cursor_next + calculated_props.padding_bottom
+        var new_size = Vector2()
+        
+        var interior_size = Vector2(max_x, y_cursor_next) - start
+        
+        new_size.x = max_x + calculated_props.padding_right + x_buffer
+        new_size.x = calc_prop_width(new_size.x, x_limit)
+        new_size.y = y_cursor_next + calculated_props.padding_bottom + y_buffer
+        new_size.y = calc_prop_height(new_size.y, y_limit)
+        if _v_scrollbar.visible:
+            print(new_size.y)
+            print(y_limit)
+        
+        var visible_interior_size = new_size - total_padding - Vector2(x_buffer, y_buffer)
+        
+        rect_size = new_size
+        
         if doc_name == "root":
             rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_top)
         
         # prevent thrashing by parent Container nodes
         if doc_name != "root" and get_parent() and not "calculated_props" in get_parent():
-            rect_min_size = rect_size
+            var min_size = new_size
+            min_size.x = min(min_size.x, interior_size.x)
+            min_size.y = min(min_size.y, interior_size.y)
+            rect_min_size = min_size
+        
+        if _v_scrollbar.visible:
+            _v_scrollbar.rect_position = (rect_size - _v_scrollbar.rect_size) * Vector2(1, 0)
+            _v_scrollbar.rect_position -= Vector2(calculated_props.padding_right, 0)
+            _v_scrollbar.rect_position += Vector2(0, calculated_props.padding_top)
+            _v_scrollbar.rect_size = rect_size * Vector2(0, 1)
+            _v_scrollbar.rect_size.y -= calculated_props.padding_top + calculated_props.padding_bottom
+            #if _h_scrollbar.visible:
+            #    _v_scrollbar.rect_size.y -= _h_scrollbar.rect_size.y
+            _v_scrollbar.max_value = interior_size.y
+            _v_scrollbar.page = visible_interior_size.y
+        
+        if _h_scrollbar.visible:
+            _h_scrollbar.rect_position = (rect_size - _h_scrollbar.rect_size) * Vector2(0, 1)
+            _h_scrollbar.rect_position -= Vector2(0, calculated_props.padding_top)
+            _h_scrollbar.rect_position += Vector2(calculated_props.padding_right, 0)
+            _h_scrollbar.rect_size = rect_size * Vector2(1, 0)
+            _h_scrollbar.rect_size.x -= calculated_props.padding_left + calculated_props.padding_right
+            if _v_scrollbar.visible:
+                _h_scrollbar.rect_size.x -= _v_scrollbar.rect_size.x
+            _h_scrollbar.max_value = interior_size.x
+            _h_scrollbar.page = visible_interior_size.x
+        
+        # FIXME: this doesn't clip child inputs properly
+        _custom_rect = Rect2(start, visible_interior_size + Vector2(x_buffer, y_buffer))
+        #_custom_rect = Rect2(start, visible_interior_size)
+        
         
         for data in rows:
             var r_row = data[0]
@@ -734,19 +870,60 @@ func reflow():
             var r_wrapped = data[3]
             _reflow_row(r_row, r_y_cursor, r_y_cursor_next, rect_size.x - calculated_props.padding_right, r_wrapped)
         
+        _update_v_scroll(0) # passed value is ignored
 
+
+var _custom_rect = null
+
+var _bg_item = null
+var _crop_item = null
 func _draw():
-    # TODO: track the styles of inlined nodes and apply them here, using canvas_item_set_custom_rect
-    if !show_self:
-        return
+    #if !show_self:
+    #    return
+    
+    var canvas = get_canvas()
+    var canvas_item = get_canvas_item()
+    
+    var p = get_parent()
+    while p and not p is Control:
+        p = p.get_parent()
+    if p and p is Control:
+        p = p.get_canvas_item()
+    else:
+        p = canvas
+    
+    if !_bg_item:
+        _bg_item = VisualServer.canvas_item_create()
+        VisualServer.canvas_item_set_visible(_bg_item, true)
+        VisualServer.canvas_item_set_parent(_bg_item, p)
+    
+    if !_crop_item:
+        _crop_item = VisualServer.canvas_item_create()
+        VisualServer.canvas_item_set_visible(_crop_item, true)
+        VisualServer.canvas_item_set_clip(_crop_item, true)
+        VisualServer.canvas_item_set_parent(_crop_item, canvas_item)
+    
+    if _custom_rect != null:
+        VisualServer.canvas_item_set_custom_rect(canvas_item, true, _custom_rect)
+        #VisualServer.canvas_item_set_custom_rect(_crop_item, true, _custom_rect)
+    
+    for _child in get_children():
+        if _child == _h_scrollbar or _child == _v_scrollbar:
+            continue
+        #if _child is CanvasItem:
+        #    var child : Control = _child
+        #    var c = child.get_canvas_item()
+        #    VisualServer.canvas_item_set_parent(c, _crop_item)
+    
     var bg : Texture = calculated_props.background
     if bg:
-        var canvas = get_canvas()
-        var canvas_item = get_canvas_item()
+        VisualServer.canvas_item_clear(_bg_item)
         var bg_size = bg.get_size()
         var bg_rect_start = Vector2()
         var bg_rect_end = rect_size
         
+        bg_rect_start.x += rect_position.x
+        bg_rect_start.y += rect_position.y
         bg_rect_start.x += calculated_props.background_offset_left
         bg_rect_start.y += calculated_props.background_offset_top
         bg_rect_end.x   += calculated_props.background_offset_right
@@ -758,7 +935,13 @@ func _draw():
             var bottom = calculated_props.background_9patch_bottom
             var left   = calculated_props.background_9patch_left
             var right  = calculated_props.background_9patch_right
-            VisualServer.canvas_item_add_nine_patch(canvas_item, bg_rect, Rect2(Vector2(), bg_size), bg.get_rid(), Vector2(left, top), Vector2(right, bottom))
+            VisualServer.canvas_item_add_nine_patch(_bg_item, bg_rect, Rect2(Vector2(), bg_size), bg.get_rid(), Vector2(left, top), Vector2(right, bottom))
         else:
-            VisualServer.canvas_item_add_texture_rect(canvas_item, bg_rect, bg.get_rid(), true)
-    pass
+            VisualServer.canvas_item_add_texture_rect(_bg_item, bg_rect, bg.get_rid(), true)
+
+func _notification(what):
+    if what == NOTIFICATION_PREDELETE:
+        if _bg_item:
+            VisualServer.free_rid(_bg_item)
+            _bg_item = null
+        pass
