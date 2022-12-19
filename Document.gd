@@ -878,8 +878,8 @@ var _custom_rect = null
 var _bg_item = null
 var _crop_item = null
 func _draw():
-    #if !show_self:
-    #    return
+    if !show_self:
+        return
     
     var canvas = get_canvas()
     var canvas_item = get_canvas_item()
