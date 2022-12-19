@@ -15,14 +15,18 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 margin_right = -522.0
 margin_bottom = -536.0
+rect_min_size = Vector2( 502, 64 )
 script = ExtResource( 1 )
+_inherited_props = [ "font_family", "font_size", "justify" ]
 
 [node name="Label" type="Label" parent="."]
 margin_top = 37.0
 margin_right = 458.0
 margin_bottom = 77.0
+custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "hit space (or whatever the confirm key is)"
+percent_visible = -0.0285714
 
 [node name="TextureRect" type="TextureRect" parent="."]
 margin_left = 307.0
@@ -36,8 +40,10 @@ margin_left = 371.0
 margin_top = 37.0
 margin_right = 1676.0
 margin_bottom = 120.0
+custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "FSDJE "
+percent_visible = -0.2
 
 [node name="TextureRect2" type="TextureRect" parent="."]
 margin_left = 421.0
@@ -51,12 +57,15 @@ margin_left = 433.0
 margin_top = 37.0
 margin_right = 518.0
 margin_bottom = 77.0
+custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )
 text = "sgfhdth"
+percent_visible = -0.142857
 
 [node name="Button" type="Button" parent="."]
 margin_left = 490.0
 margin_top = 31.0
 margin_right = 502.0
 margin_bottom = 77.0
+custom_colors/font_color = Color( 1, 1, 1, 1 )
 custom_fonts/font = SubResource( 1 )

@@ -2,7 +2,7 @@ tool
 extends Container
 class_name Document
 
-var calculated_props = {
+var default_props = {
     "display": "inline-block", # or block, or inline, or float
     # NOTE: float DOES NOT work ANYTHING like how float:left/right work in HTML/CSS.
     # float just removes the element from flow layout so that it can be positioned
@@ -24,11 +24,18 @@ var calculated_props = {
     "offset_x": 0,
     "offset_y": 0,
     
+    "overflow": "visible", # TODO, implement "hidden", "scroll_h", "scroll_v", and "scroll"
+    
     # bottom, middle, top
     "vertical_align": "bottom",
+    
     "font_family": [preload("res://font/Andika-Regular.ttf"), preload("res://font/SawarabiGothic-Regular.ttf")],
+    "color": "white",
+    "font_size": 16,
+    "text_shadow_color": Color.transparent,
+    
     "background": null,
-    "background_9patch" : false,
+    "background_9patch" : false, # FIXME change to "mode" with "tile", "9patch", "fit", "fill", "stretch", etc (and add alignment options)
     "background_9patch_top": 0,
     "background_9patch_bottom": 0,
     "background_9patch_left": 0,
@@ -38,8 +45,6 @@ var calculated_props = {
     "background_offset_bottom": 0,
     "background_offset_left": 0,
     "background_offset_right": 0,
-    
-    "font_size": 16,
     
     "layout": "flow_h_lr", # TODO: implement other flow models
     
@@ -51,6 +56,9 @@ var calculated_props = {
     "max_width": null,
     "min_width": null,
 }
+
+var calculated_props = default_props.duplicate()
+var calculated_props_priority = []
 
 var font_cache = {}
 
@@ -103,6 +111,13 @@ export(String, MULTILINE) var markup = \
 A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live—which is to say, not <ruby>everlasting<rt>permanent</ruby> in the slightest.
 <br>
 ここから何をしたら<ruby>最後<rt>エンド</ruby>まで歩きつづけるのでしょうか。
+<node type="GridContainer" columns="2"><a>a</a> <b>b</b> <a>c</a> <b>d</b> <a>e</a> <b>f</b></node>
+<br>
+<bruh>asdf</bruh>
+<br>
+<bruh><fun>wow oh MY</fun></bruh>
+<br>
+<bruh><a><fun>fun for the WHOLE FAMILY</fun></a></bruh>
 """
 
 var default_stylesheet = """
@@ -161,6 +176,17 @@ export(String, MULTILINE) var root_stylesheet = \
 }
 fun {
     background: "res://9PatchGradient2.tres";
+    text_shadow_color: orange;
+    text_shadow_offset: 0 0;
+    display: inline;
+}
+bruh fun {
+    background: none;
+    color: pink;
+}
+bruh > fun {
+    background: none;
+    color: lightgreen;
 }
 """
 
@@ -194,9 +220,13 @@ func get_logical_characters():
             # FIXME: count the roots of groups of nodes with no labels as 1 characters
             pass
 
+var _prev_int_visible_now = -100
 func set_visible_characters(new_visible : float):
     visible_characters = new_visible
     var visible_now = int(floor(visible_characters))
+    if _prev_int_visible_now == visible_now:
+        return
+    _prev_int_visible_now = visible_now
     var all_visible = visible_now < 0
     for child in _get_children_recursively(self, true):
         if child is Label or child is RichTextLabel:
@@ -267,9 +297,72 @@ func _flatten_style_var(values : Array, vars : Dictionary):
     #    pass
     return values
 
-export var _inherited_props = ["font_family", "font_size", "justify"]
+func _get_color(color):
+    if color is String:
+        color = color.to_lower()
+    if color in DocumentHelpers._colors:
+        color = DocumentHelpers._colors[color]
+    if not color is Color:
+        color = Color(color)
+    return color
+
+func _target_matches(target : String) -> bool:
+    if target == doc_name:
+        return true
+    if target == "#" + doc_id:
+        return true
+    for _class in doc_class:
+        if target == "." + _class:
+            return true
+    return false
+
+# target list is inverted, i.e. 0 is leaf and end is parent
+func _target_list_matches(target_list : Array) -> bool:
+    if !_target_matches(target_list[0]):
+        return false
+    var parent = get_parent()
+    var i = 1
+    var must_be_direct = false
+    var failed = false
+    while i < target_list.size() and parent != null:
+        if target_list[i] == ">":
+            must_be_direct = true
+            i += 1
+            continue
+        elif parent._target_matches(target_list[i]):
+            must_be_direct = false
+            i += 1
+        elif must_be_direct:
+            failed = true
+            break
+        elif parent == null:
+            break
+        
+        while parent != null:
+            parent = parent.get_parent()
+            if parent != null and "calculated_props" in parent:
+                break
+    
+    return !failed and i == target_list.size()
+
+func _calculate_priority(target_list : Array):
+    var n = [0, 0, 0, 0]
+    for target in target_list:
+        if target == ">":
+            continue
+        elif target.begins_with("#"):
+            n[1] += 1
+        elif target.begins_with("."):
+            n[2] += 1
+        elif target.begins_with("."):
+            n[3] += 1
+    return n
+
+export var _inherited_props = ["font_family", "font_size", "justify", "color"]
 var _always_array_props = ["font_family"]
 func calculate_style(parent_props, fed_style_data : Array, _font_cache):
+    calculated_props_priority = {}
+    
     fed_style_data += style_data
     font_cache = _font_cache
     if parent_props:
@@ -282,34 +375,40 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
         var valid_target = false
         for target in ruleset.targets:
             #print(target)
-            if target == ":vars":
+            if target is String and target == ":vars":
                 for rule in ruleset.rules:
                     vars[rule.prop] = rule.values
     
     for ruleset in default_style_data + fed_style_data + custom_style_data:
         var valid_target = false
+        var longest_target = 0
         for target in ruleset.targets:
-            if target == doc_name:
-                valid_target = true
-            if target == "#" + doc_id:
-                valid_target = true
-            for _class in doc_class:
-                if target == "." + _class:
+            if target is String:
+                if _target_matches(target):
                     valid_target = true
-                    break
+                    longest_target = max(longest_target, 1)
+            else:
+                if _target_list_matches(target):
+                    valid_target = true
+                    longest_target = max(longest_target, target.size())
         if !valid_target:
             continue
         for _rule in ruleset.rules:
             var rule : DocumentHelpers.StyleRule = _rule
             var values = _flatten_style_var(rule.values, vars)
+            var to_assign
             if values == ["inherit"] and parent_props:
-                calculated_props[rule.prop] = parent_props[rule.prop]
+                to_assign = parent_props[rule.prop]
             elif values.size() > 1 or rule.prop in _always_array_props:
-                calculated_props[rule.prop] = values
-                pass
+                to_assign = values
             else:
-                calculated_props[rule.prop] = values[0]
-                pass
+                to_assign = values[0]
+            var priority = longest_target
+            if not rule.prop in calculated_props_priority:
+                calculated_props_priority[rule.prop] = priority
+            if calculated_props_priority[rule.prop] <= priority:
+                calculated_props[rule.prop] = to_assign
+                calculated_props_priority[rule.prop] = priority
             #print("!%*@: ", rule.values)
     
     for k in assigned_props.keys():
@@ -323,15 +422,22 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
     for child in get_children():
         if child.has_method("calculate_style"):
             child.calculate_style(calculated_props, fed_style_data + custom_style_data, font_cache)
-        elif child is Label or child is Button:
+        elif child is Label or child is Button or child is RichTextLabel:
             #print(calculated_props.font_family)
             if calculated_props.font_family is Array and calculated_props.font_family.size() > 0:
-                var fonts = []
-                var base_font : DynamicFont = make_font(calculated_props.font_family, calculated_props.font_size)
-                child.add_font_override("font", base_font)
+                var font : DynamicFont = make_font(calculated_props.font_family, calculated_props.font_size)
+                if not child is RichTextLabel:
+                    child.add_font_override("font", font)
+                else:
+                    child.add_font_override("font", font)
                 #print(base_font)
                 #for i in base_font.get_fallback_count():
                 #    print(base_font.get_fallback(i))
+            
+            var color = _get_color(calculated_props.color)
+            var shadow_color = _get_color(calculated_props.text_shadow_color)
+            
+            child.add_color_override("font_color", color)
 
 func _init():
     anchor_right = 1
@@ -488,8 +594,11 @@ func reflow():
         layout_parent = null
     #print("sort...")
     
+    #rect_min_size = Vector2()
+    
     if calculated_props.layout == "flow_h_lr":
         var parent_size = get_parent_area_size()
+        #print(doc_name, parent_size)
         var size = Vector2()
         size.x = parent_size.x * (anchor_right - anchor_left)
         size.y = parent_size.y * (anchor_bottom - anchor_top)
@@ -505,6 +614,10 @@ func reflow():
         var check_queue = get_children()
         
         var max_x = 0
+        
+        rect_size = size
+        rect_size.x -= calculated_props.padding_left
+        rect_size.x -= calculated_props.padding_right
         
         while check_queue.size() > 0:
             var _child = check_queue.pop_front()
@@ -609,6 +722,10 @@ func reflow():
         rect_size.y = y_cursor_next + calculated_props.padding_bottom
         if doc_name == "root":
             rect_position = Vector2(calculated_props.margin_left, calculated_props.margin_top)
+        
+        # prevent thrashing by parent Container nodes
+        if doc_name != "root" and get_parent() and not "calculated_props" in get_parent():
+            rect_min_size = rect_size
         
         for data in rows:
             var r_row = data[0]

@@ -101,17 +101,20 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
     else:
         var node
         if _xml.name.to_lower() == "node":
-            print("trying to spawn a ", _xml.name)
+            #print("trying to spawn a ", _xml.name)
             if not "type" in _xml.attributes:
                 return null
             node = ClassDB.instance(_xml.attributes.type)
             if !node:
                 return null
+            node.anchor_right = 1
+            node.anchor_bottom = 1
             for a_name in _xml.attributes:
-                print("setting... ", a_name)
+                #print("setting... ", a_name)
                 if a_name == "type" or not a_name in node:
                     continue
                 var a_val = _xml.attributes[a_name]
+                #print(a_val)
                 if a_val is Array:
                     var array = []
                     for val in a_val:
@@ -129,7 +132,11 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
             if "class" in _xml.attributes:
                 node.doc_class = _xml.attributes.class.split(" ", false)
             if "style" in _xml.attributes:
-                node.custom_style_data = parse_style(_xml.attributes.style)
+                var rules = parse_style_rules(_xml.attributes.style, 0, 1)
+                var style = StyleRuleset.new()
+                style.targets = [":inline"]
+                style.rules = rules
+                node.custom_style_data = style
             # FIXME apply built-in attributes (style, class, id, etc)
         
         for c in _xml.children:
@@ -312,6 +319,7 @@ static func parse_document(doc : String):
 class StyleRule extends Reference:
     var prop : String = ""
     var values : Array = []
+    var priority : Array = [0, 0, 0, 0]
     
     func to_string():
         var c = ""
@@ -332,7 +340,19 @@ class StyleRuleset extends Reference:
             t += "{} ".format([v], "{}")
         return "{t}{\n{c}}\n".format({"t":t, "c":c})
 
-static func parse_style_rule(text : String, i : int):
+static func _process_style_rule_string(rule_string, do_numeric_conversion):
+    rule_string = rule_string.strip_edges()
+    if do_numeric_conversion and rule_string.is_valid_float():
+        rule_string = rule_string.to_float()
+    elif rule_string == "false":
+        rule_string = false
+    elif rule_string == "true":
+        rule_string = true
+    elif rule_string == "none":
+        rule_string = null
+    return rule_string
+
+static func parse_style_rule(text : String, i : int, first_priority):
     var mode = "name"
     var in_string = ""
     var in_escape = false
@@ -379,15 +399,10 @@ static func parse_style_rule(text : String, i : int):
                     in_string = c
                 elif c.strip_edges() == "" or c == ";" or c == "}" or c == ",":
                     if rule_string != "":
-                        rule_string = rule_string.strip_edges()
-                        if rule_string.is_valid_float():
-                            rule_string = rule_string.to_float()
-                        elif rule_string == "false":
-                            rule_string = false
-                        elif rule_string == "true":
-                            rule_string = true
+                        rule_string = _process_style_rule_string(rule_string, true)
                         rule_data.push_back(rule_string)
                         rule_string = ""
+                        
                         if c == ",":
                             rule_data.push_back(",")
                     if c == "}":
@@ -398,20 +413,19 @@ static func parse_style_rule(text : String, i : int):
                     rule_string += c
     
     if rule_string != "":
-        rule_string = rule_string.strip_edges()
-        if !in_string and rule_string.is_valid_float():
-            rule_string = rule_string.to_float()
-        elif rule_string == "false":
-            rule_string = false
-        elif rule_string == "true":
-            rule_string = true
+        rule_string = _process_style_rule_string(rule_string, in_string == "")
         rule_data.push_back(rule_string)
         rule_string = ""
     
     if mode == "values":
         var ret = StyleRule.new()
+        if first_priority:
+            ret.priority[0] += 1
         ret.prop = rule_name
         ret.values = rule_data
+        if ret.values.size() > 0 and ret.values[-1] is String and ret.values[-1] == "!important":
+            ret.values.pop_back()
+            ret.priority[0] += 1
         for j in ret.values.size():
             var val = ret.values[j]
             if val is String and val.begins_with("res://"):
@@ -421,10 +435,10 @@ static func parse_style_rule(text : String, i : int):
         return null
 
 
-static func parse_style_rules(text : String, i : int):
+static func parse_style_rules(text : String, i : int, first_priority = 0):
     var rules = []
     while i < text.length():
-        var rule = parse_style_rule(text, i)
+        var rule = parse_style_rule(text, i, first_priority)
         if rule != null:
             #print("got rule ", rule[0].prop, rule[0].values, rule[1])
             rules.push_back(rule[0])
@@ -443,15 +457,23 @@ static func parse_style_target(text : String, i : int):
     var f = text.find("{", i)
     if f > 0:
         var target_str : String = text.substr(i, f-i)
-        var targets = target_str.split(",")
+        var targets = Array(target_str.split(","))
         for j in targets.size():
-            targets[j] = targets[j].strip_edges()
+            var t = targets[j]
+            t = t.strip_edges()
+            t = t.replace("\n", " ")
+            t = t.replace("\t", " ")
+            t = t.split(" ", false)
+            if t.size() == 1:
+                targets[j] = t[0]
+            else:
+                t.invert()
+                targets[j] = t
         i = f+1
         
         var data = parse_style_rules(text, i)
         var rules = data[0]
         i = data[1]
-        
         
         var ret = StyleRuleset.new()
         ret.targets = targets
@@ -471,6 +493,158 @@ static func parse_style(text : String):
             i = data[1]
         else:
             break
-    for s in styles:
-        print(s.to_string())
+    #for s in styles:
+    #    print(s.to_string())
     return styles
+
+const _colors = {
+    "aliceblue": "#f0f8ff",
+    "antiquewhite": "#faebd7",
+    "aqua": "#00ffff",
+    "aquamarine": "#7fffd4",
+    "azure": "#f0ffff",
+    "beige": "#f5f5dc",
+    "bisque": "#ffe4c4",
+    "black": "#000000",
+    "blanchedalmond": "#ffebcd",
+    "blue": "#0000ff",
+    "blueviolet": "#8a2be2",
+    "brown": "#a52a2a",
+    "burlywood": "#deb887",
+    "cadetblue": "#5f9ea0",
+    "chartreuse": "#7fff00",
+    "chocolate": "#d2691e",
+    "coral": "#ff7f50",
+    "cornflowerblue": "#6495ed",
+    "cornsilk": "#fff8dc",
+    "crimson": "#dc143c",
+    "cyan": "#00ffff",
+    "darkblue": "#00008b",
+    "darkcyan": "#008b8b",
+    "darkgoldenrod": "#b8860b",
+    "darkgray": "#a9a9a9",
+    "darkgreen": "#006400",
+    "darkgrey": "#a9a9a9",
+    "darkkhaki": "#bdb76b",
+    "darkmagenta": "#8b008b",
+    "darkolivegreen": "#556b2f",
+    "darkorange": "#ff8c00",
+    "darkorchid": "#9932cc",
+    "darkred": "#8b0000",
+    "darksalmon": "#e9967a",
+    "darkseagreen": "#8fbc8f",
+    "darkslateblue": "#483d8b",
+    "darkslategray": "#2f4f4f",
+    "darkslategrey": "#2f4f4f",
+    "darkturquoise": "#00ced1",
+    "darkviolet": "#9400d3",
+    "deeppink": "#ff1493",
+    "deepskyblue": "#00bfff",
+    "dimgray": "#696969",
+    "dimgrey": "#696969",
+    "dodgerblue": "#1e90ff",
+    "firebrick": "#b22222",
+    "floralwhite": "#fffaf0",
+    "forestgreen": "#228b22",
+    "fuchsia": "#ff00ff",
+    "gainsboro": "#dcdcdc",
+    "ghostwhite": "#f8f8ff",
+    "gold": "#ffd700",
+    "goldenrod": "#daa520",
+    "gray": "#808080",
+    "green": "#008000",
+    "greenyellow": "#adff2f",
+    "grey": "#808080",
+    "honeydew": "#f0fff0",
+    "hotpink": "#ff69b4",
+    "indianred": "#cd5c5c",
+    "indigo": "#4b0082",
+    "ivory": "#fffff0",
+    "khaki": "#f0e68c",
+    "lavender": "#e6e6fa",
+    "lavenderblush": "#fff0f5",
+    "lawngreen": "#7cfc00",
+    "lemonchiffon": "#fffacd",
+    "lightblue": "#add8e6",
+    "lightcoral": "#f08080",
+    "lightcyan": "#e0ffff",
+    "lightgoldenrodyellow": "#fafad2",
+    "lightgray": "#d3d3d3",
+    "lightgreen": "#90ee90",
+    "lightgrey": "#d3d3d3",
+    "lightpink": "#ffb6c1",
+    "lightsalmon": "#ffa07a",
+    "lightseagreen": "#20b2aa",
+    "lightskyblue": "#87cefa",
+    "lightslategray": "#778899",
+    "lightslategrey": "#778899",
+    "lightsteelblue": "#b0c4de",
+    "lightyellow": "#ffffe0",
+    "lime": "#00ff00",
+    "limegreen": "#32cd32",
+    "linen": "#faf0e6",
+    "magenta": "#ff00ff",
+    "maroon": "#800000",
+    "mediumaquamarine": "#66cdaa",
+    "mediumblue": "#0000cd",
+    "mediumorchid": "#ba55d3",
+    "mediumpurple": "#9370db",
+    "mediumseagreen": "#3cb371",
+    "mediumslateblue": "#7b68ee",
+    "mediumspringgreen": "#00fa9a",
+    "mediumturquoise": "#48d1cc",
+    "mediumvioletred": "#c71585",
+    "midnightblue": "#191970",
+    "mintcream": "#f5fffa",
+    "mistyrose": "#ffe4e1",
+    "moccasin": "#ffe4b5",
+    "navajowhite": "#ffdead",
+    "navy": "#000080",
+    "oldlace": "#fdf5e6",
+    "olive": "#808000",
+    "olivedrab": "#6b8e23",
+    "orange": "#ffa500",
+    "orangered": "#ff4500",
+    "orchid": "#da70d6",
+    "palegoldenrod": "#eee8aa",
+    "palegreen": "#98fb98",
+    "paleturquoise": "#afeeee",
+    "palevioletred": "#db7093",
+    "papayawhip": "#ffefd5",
+    "peachpuff": "#ffdab9",
+    "peru": "#cd853f",
+    "pink": "#ffc0cb",
+    "plum": "#dda0dd",
+    "powderblue": "#b0e0e6",
+    "purple": "#800080",
+    "red": "#ff0000",
+    "rosybrown": "#bc8f8f",
+    "royalblue": "#4169e1",
+    "saddlebrown": "#8b4513",
+    "salmon": "#fa8072",
+    "sandybrown": "#f4a460",
+    "seagreen": "#2e8b57",
+    "seashell": "#fff5ee",
+    "sienna": "#a0522d",
+    "silver": "#c0c0c0",
+    "skyblue": "#87ceeb",
+    "slateblue": "#6a5acd",
+    "slategray": "#708090",
+    "slategrey": "#708090",
+    "snow": "#fffafa",
+    "springgreen": "#00ff7f",
+    "steelblue": "#4682b4",
+    "tan": "#d2b48c",
+    "teal": "#008080",
+    "thistle": "#d8bfd8",
+    "tomato": "#ff6347",
+    "turquoise": "#40e0d0",
+    "violet": "#ee82ee",
+    "wheat": "#f5deb3",
+    "white": "#ffffff",
+    "whitesmoke": "#f5f5f5",
+    "yellow": "#ffff00",
+    "yellowgreen": "#9acd32",
+    
+    "transparent": Color(0, 0, 0, 0),
+}
