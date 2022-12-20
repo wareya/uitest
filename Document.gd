@@ -2,6 +2,17 @@ tool
 extends Container
 class_name Document
 
+#### TODO LIST ####
+# other flow models
+# fit/fill background modes + background alignment
+# make sure inline styles work
+# DOM API (at least queries)
+# style transitions
+# background color
+# text outline and shadow control
+# width/height model settings (padding/margin included or not)
+# css calc (including referencing core properties) (OR, a system of units, like 10em etc)
+
 var default_props = {
     "display": "inline-block", # or block, or inline, or detached
     # NOTE: inline elements are not rendered, only their children. their children are treated
@@ -119,6 +130,9 @@ A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live
 <bruh><fun>wow oh MY</fun></bruh>
 <br>
 <bruh><a><fun>fun for the WHOLE FAMILY</fun></a></bruh>
+<br>
+<big><ruby>終わり<rt><ruby>最後<rt>エンド</ruby></ruby></big>
+<br>
 """
 
 var default_stylesheet = """
@@ -689,6 +703,8 @@ func reflow():
     
     if calculated_props.layout == "flow_h_lr":
         var parent_size = get_parent_area_size()
+        if layout_parent:
+            parent_size = layout_parent.rect_size
         #print(doc_name, parent_size)
         var size = Vector2()
         size.x = parent_size.x * (anchor_right - anchor_left)
@@ -726,7 +742,9 @@ func reflow():
         #rect_size.x -= calculated_props.padding_left
         #rect_size.x -= calculated_props.padding_right
         
-        var check_queue = get_children()
+        var check_queue = []
+        if doc_name == "root" or calculated_props.display != "inline":
+            check_queue= get_children()
         #if check_queue.size() == 1 and check_queue[0] is DocumentHelpers.DocScrollContents:
         #    check_queue[0].rect_size = interior_size
         #    check_queue[0].rect_position = Vector2(x_cursor, y_cursor)
@@ -793,8 +811,8 @@ func reflow():
             
             #print(child, " ", child_size, " ", x_cursor, " ", y_cursor, "->", y_cursor_next, " ", x_limit)
             
-            if doc_name != "root" and calculated_props.display == "inline":
-                continue
+            #if doc_name != "root" and calculated_props.display == "inline":
+            #    continue
             
             if "calculated_props" in child and child.calculated_props.display == "detached":
                 var origin = get_global_rect().position
@@ -838,13 +856,15 @@ func reflow():
         
         var interior_size = Vector2(max_x, y_cursor_next) - start
         
+        print("--", doc_name, "-", max_x, "-", x_limit, "-", parent_size.x)
+        
         new_size.x = max_x + calculated_props.padding_right + x_buffer
         new_size.x = calc_prop_width(new_size.x, x_limit)
         new_size.y = y_cursor_next + calculated_props.padding_bottom + y_buffer
         new_size.y = calc_prop_height(new_size.y, y_limit)
-        if _v_scrollbar.visible:
-            print(new_size.y)
-            print(y_limit)
+        #if _v_scrollbar.visible:
+        #    print(new_size.y)
+        #    print(y_limit)
         
         var visible_interior_size = new_size - total_padding - Vector2(x_buffer, y_buffer)
         

@@ -141,7 +141,6 @@ static func from_xmlnode(_xml : DocumentHelpers.XMLNode, default_script : Script
                 style.targets = [":inline"]
                 style.rules = rules
                 node.custom_style_data = style
-            # FIXME apply built-in attributes (style, class, id, etc)
         
         #var contents = DocScrollContents.new()
         #node.add_child(contents)
