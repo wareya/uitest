@@ -3,11 +3,8 @@ extends Container
 class_name Document
 
 var default_props = {
-    "display": "inline-block", # or block, or inline, or float
-    # NOTE: float DOES NOT work ANYTHING like how float:left/right work in HTML/CSS.
-    # float just removes the element from flow layout so that it can be positioned
-    # relative to the layout cursor with offset_x and offset_y.
-    # NOTE2: inline elements are not rendered, only their children. their children are treated
+    "display": "inline-block", # or block, or inline, or detached
+    # NOTE: inline elements are not rendered, only their children. their children are treated
     # by layout algorithms as existing within the parent of the inline element.
     
     # numbers only
@@ -24,7 +21,7 @@ var default_props = {
     "offset_x": 0,
     "offset_y": 0,
     
-    "overflow": "visible", # TODO, implement "hidden", "scroll_h", "scroll_v", and "scroll"
+    "overflow": "visible", # "visible", "hidden", "scroll_h", "scroll_v", and "scroll"
     
     # bottom, middle, top
     "vertical_align": "bottom",
@@ -146,7 +143,7 @@ ruby {
 }
 rt {
     justify: center;
-    display: float;
+    display: detached;
     font_size: var(--rubysize);
     font_family: var(--rubyfont);
     width: 100%;
@@ -189,12 +186,14 @@ fun {
     display: inline-block;
 }
 bruh fun {
-    background: none;
-    color: pink;
+    color: yellow;
+}
+root bruh > fun {
+    color: cyan;
 }
 bruh > fun {
     background: none;
-    color: lightgreen;
+    color: orange;
 }
 """
 
@@ -227,13 +226,13 @@ func _ready():
 
 export var visible_characters : float = -1.0 setget set_visible_characters
 
-func _get_children_recursively(parent : Node, float_filter = false):
-    if float_filter and "calculated_props" in parent and parent.calculated_props.display == "float":
+func _get_children_recursively(parent : Node, detached_filter = false):
+    if detached_filter and "calculated_props" in parent and parent.calculated_props.display == "detached":
         return []
     var children = []
     for child in parent.get_children():
         children.push_back(child)
-        children.append_array(_get_children_recursively(child, float_filter))
+        children.append_array(_get_children_recursively(child, detached_filter))
     return children
 
 func get_logical_characters():
@@ -375,7 +374,9 @@ func _target_list_matches(target_list : Array) -> bool:
     
     return !failed and i == target_list.size()
 
-func _calculate_priority(target_list : Array):
+func _calculate_priority(target_list):
+    if not target_list is Array and not target_list is PoolStringArray:
+        target_list = [target_list]
     var n = [0, 0, 0, 0]
     for target in target_list:
         if target == ">":
@@ -384,9 +385,22 @@ func _calculate_priority(target_list : Array):
             n[1] += 1
         elif target.begins_with("."):
             n[2] += 1
-        elif target.begins_with("."):
+        else:
             n[3] += 1
     return n
+
+func _compare_priority(a : Array, b : Array):
+    if a[0] > b[0]: return true
+    elif a[1] > b[1]: return true
+    elif a[2] > b[2]: return true
+    elif a[3] > b[3]: return true
+    
+    elif a[0] < b[0]: return false
+    elif a[1] < b[1]: return false
+    elif a[2] < b[2]: return false
+    elif a[3] < b[3]: return false
+    
+    return true
 
 export var _inherited_props = ["font_family", "font_size", "justify", "color"]
 var _always_array_props = ["font_family"]
@@ -411,18 +425,23 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
     
     for ruleset in default_style_data + fed_style_data + custom_style_data:
         var valid_target = false
-        var longest_target = 0
+        var highest_priority = [0, 0, 0, 0]
         for target in ruleset.targets:
+            var is_match = false
             if target is String:
-                if _target_matches(target):
-                    valid_target = true
-                    longest_target = max(longest_target, 1)
+                is_match = _target_matches(target)
             else:
-                if _target_list_matches(target):
-                    valid_target = true
-                    longest_target = max(longest_target, target.size())
+                is_match = _target_list_matches(target)
+            
+            if is_match:
+                valid_target = true
+                var priority = _calculate_priority(target)
+                if _compare_priority(priority, highest_priority):
+                    highest_priority = priority
+        
         if !valid_target:
             continue
+        
         for _rule in ruleset.rules:
             var rule : DocumentHelpers.StyleRule = _rule
             var values = _flatten_style_var(rule.values, vars)
@@ -433,13 +452,13 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
                 to_assign = values
             else:
                 to_assign = values[0]
-            var priority = longest_target
+            
             if not rule.prop in calculated_props_priority:
-                calculated_props_priority[rule.prop] = priority
-            if calculated_props_priority[rule.prop] <= priority:
+                calculated_props_priority[rule.prop] = highest_priority
+            
+            if _compare_priority(highest_priority, calculated_props_priority[rule.prop]):
                 calculated_props[rule.prop] = to_assign
-                calculated_props_priority[rule.prop] = priority
-            #print("!%*@: ", rule.values)
+                calculated_props_priority[rule.prop] = highest_priority
     
     for k in assigned_props.keys():
         calculated_props[k] = assigned_props[k]
@@ -447,7 +466,12 @@ func calculate_style(parent_props, fed_style_data : Array, _font_cache):
     var fs = calculated_props.font_size
     if fs is String and fs.ends_with("%"):
         var percent = fs.substr(0, fs.length()-1).to_float()
-        calculated_props.font_size = parent_props.font_size * percent * 0.01
+        if parent_props:
+            calculated_props.font_size = parent_props.font_size * percent * 0.01
+        else:
+            calculated_props.font_size = default_props.font_size * percent * 0.01
+    
+    rect_clip_content = calculated_props.overflow != "visible"
     
     for child in get_children():
         if child.has_method("calculate_style"):
@@ -772,7 +796,7 @@ func reflow():
             if doc_name != "root" and calculated_props.display == "inline":
                 continue
             
-            if "calculated_props" in child and child.calculated_props.display == "float":
+            if "calculated_props" in child and child.calculated_props.display == "detached":
                 var origin = get_global_rect().position
                 child.set_global_position(offset + origin)
                 continue
@@ -896,6 +920,7 @@ func _draw():
         _bg_item = VisualServer.canvas_item_create()
         VisualServer.canvas_item_set_visible(_bg_item, true)
         VisualServer.canvas_item_set_parent(_bg_item, p)
+        VisualServer.canvas_item_set_draw_behind_parent(_bg_item, true)
     
     if !_crop_item:
         _crop_item = VisualServer.canvas_item_create()

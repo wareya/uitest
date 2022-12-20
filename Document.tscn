@@ -18,6 +18,48 @@ margin_bottom = -536.0
 rect_min_size = Vector2( 502, 64 )
 rect_pivot_offset = Vector2( 1343, 79 )
 script = ExtResource( 1 )
+root_stylesheet = "root {
+    background: \"res://9PatchGradient.tres\";
+    margin_left: 5;
+    margin_right: 5;
+    margin_top: 5;
+    margin_bottom: 5;
+    padding_top: 8;
+    padding_left: 8;
+    padding_bottom: 8;
+    padding_right: 8;
+    background_9patch: true;
+    background_9patch_top: 4.5;
+    background_9patch_bottom: 6.5;
+    background_9patch_left: 6;
+    background_9patch_right: 6;
+    
+    overflow: scroll;
+    
+    max_height: 400;
+}
+:vars {
+    --white: \"#FFFFFF\";
+    --rubysize: 65%;
+    --rubyfont: var(--englishfont) var(--japanesefont);
+    --japanesefont: \"res://font/SawarabiGothic-Regular.ttf\";
+    --englishfont: \"res://font/Andika-Regular.ttf\";
+}
+fun {
+    background: \"res://9PatchGradient2.tres\";
+    text_shadow_color: orange;
+    text_shadow_offset: 0 0;
+    display: inline-block;
+}
+bruh fun {
+    background: none;
+    color: pink;
+}
+bruh > fun {
+    background: none;
+    color: lightgreen;
+}
+"
 _inherited_props = [ "font_family", "font_size", "justify" ]
 
 [node name="Label" type="Label" parent="."]
