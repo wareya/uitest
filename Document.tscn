@@ -18,6 +18,70 @@ margin_bottom = -536.0
 rect_min_size = Vector2( 502, 64 )
 rect_pivot_offset = Vector2( 1343, 79 )
 script = ExtResource( 1 )
+markup = "there <span> once </span> was <fun>a man</fun> from <img src=\"res://icon.png\"/> who knew-it-all     too well of the <big>danger to us ALL</big> <b> and<br>so he <node type=\"Button\" text=\"Look! A button!\"></node> ran </b>
+<br>
+<br>
+A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live—which is to say, not <ruby>everlasting<rt>permanent</ruby> in the slightest.
+<br>
+ここから何をしたら<ruby>最後<rt>エンド</ruby>まで歩きつづけるのでしょうか。
+<node type=\"GridContainer\" columns=\"2\"><a>a</a> <b>b</b> <a>c</a> <b>d</b> <a>e</a> <b>f</b></node>
+<br>
+<bruh>asdf</bruh>
+<br>
+<bruh><fun>wow oh MY</fun></bruh>
+<br>
+<bruh><a><fun>fun for the WHOLE FAMILY</fun></a></bruh>
+<br>
+<big><ruby>終わり<rt><ruby>最後<rt>エンド</ruby></ruby></big>
+<br>
+<ruby>smol<rt>long ruby text above big text</ruby>
+<br>
+<span style=\"color: red;\">(leading text to prevent overflow) </span><ruby>smol<rt>long ruby text above big text</ruby>
+"
+root_stylesheet = "root {
+    background: \"res://9PatchGradient.tres\";
+    margin_left: 5;
+    margin_right: 5;
+    margin_top: 5;
+    margin_bottom: 5;
+    padding_top: 8;
+    padding_left: 8;
+    padding_bottom: 8;
+    padding_right: 8;
+    background_9patch: true;
+    background_9patch_top: 4.5;
+    background_9patch_bottom: 6.5;
+    background_9patch_left: 6;
+    background_9patch_right: 6;
+    
+    overflow: scroll;
+    
+    max_height: 400;
+}
+:vars {
+    --white: \"#FFFFFF\";
+    --rubysize: 65%;
+    --rubyfont: var(--englishfont) var(--japanesefont);
+    --japanesefont: \"res://font/SawarabiGothic-Regular.ttf\";
+    --englishfont: \"res://font/Andika-Regular.ttf\";
+}
+fun {
+    background: \"res://9PatchGradient2.tres\";
+    text_shadow_color: orange;
+    text_shadow_offset: 0 0;
+    display: inline-block;
+}
+bruh fun {
+    color: yellow;
+}
+root bruh > fun {
+    color: cyan;
+}
+bruh > fun {
+    background: none;
+    color: orange;
+}
+"
 _inherited_props = [ "font_family", "font_size", "justify" ]
 
 [node name="Label" type="Label" parent="."]

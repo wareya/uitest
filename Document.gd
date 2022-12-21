@@ -33,9 +33,14 @@ var default_props = {
     "offset_y": 0,
     
     "overflow": "visible", # "visible", "hidden", "scroll_h", "scroll_v", and "scroll"
+    "wrap" : "auto", # "auto", "never"
     
     # bottom, middle, top
-    "vertical_align": "bottom",
+    "row_align": "bottom",
+    
+    # FOR VERTICAL LAYOUT MODES ONLY
+    # left, middle, right
+    "column_align": "left",
     
     "font_family": [preload("res://font/Andika-Regular.ttf"), preload("res://font/SawarabiGothic-Regular.ttf")],
     "color": "white",
@@ -54,10 +59,15 @@ var default_props = {
     "background_offset_left": 0,
     "background_offset_right": 0,
     
-    "layout": "flow_h_lr", # TODO: implement other flow models
+    "layout": "flow",
+    # lr_tb, rl_tb, lr_br, rl_bt
+    # WARNING: text with rl directions is buggy! no, I'm not going to fix it!
+    # godot 3 doesn't expose low-enough-level text-related stuff to do it properly
+    # only us it for inline block layout! (or grids)
+    "layout_direction": "lr_tb",
     
-    # left, right, center, or justified
-    "justify": "left",
+    # start, end, center, or justified
+    "justify": "start",
     
     # number or percent, e.g. 512 or "50%". no units.
     "width": null,
@@ -133,6 +143,11 @@ A silence as <ruby>everlasting<rt>permanent</ruby> as the realm in which we live
 <br>
 <big><ruby>終わり<rt><ruby>最後<rt>エンド</ruby></ruby></big>
 <br>
+<ruby>smol<rt>long ruby text above big text</ruby>
+<br>
+<span style="color: red;">(leading text to prevent overflow) </span><ruby>smol<rt>long ruby text above big text</ruby>
+<br>
+<span style="color: red;">(leading text to prevent overflow) </span><ruby>smol<rt>long ruby text above big text</ruby>
 """
 
 var default_stylesheet = """
@@ -154,6 +169,7 @@ ruby {
     justify: center;
     display: inline-block;
     padding_top: 4;
+    wrap: never;
 }
 rt {
     justify: center;
@@ -162,6 +178,7 @@ rt {
     font_family: var(--rubyfont);
     width: 100%;
     offset_y: -4;
+    wrap: never;
 }
 """
 
@@ -185,6 +202,8 @@ export(String, MULTILINE) var root_stylesheet = \
     overflow: scroll;
     
     max_height: 400;
+    
+    layout_direction: lr_tb;
 }
 :vars {
     --white: "#FFFFFF";
@@ -553,39 +572,54 @@ var _content_memo = {}
 
 var max_descent = 0
 var max_ascent = 0
-func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrapped):
+func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrapped : bool):
+    var right_to_left = calculated_props.layout_direction.find("rl") >= 0
     max_descent = 0
     max_ascent = 0
     var min_x = 0
     var max_x = 0
-    for pair in row:
-        var child : Control = pair[0]
+    var prev_label_text = ""
+    for i in row.size():
+        var info = row[i]
+        var child : Control = info[0]
+        
         if child is Label:
             var font = (child as Label).get_font("font")
             max_ascent  = max(max_ascent , font.get_ascent())
             max_descent = max(max_descent, font.get_descent())
+            if right_to_left and child.text.ends_with(" "):
+                info[3].x += font.get_char_size(ord(" ")).x # offset
+            prev_label_text = child.text
+            #    child.text = " " + child.text.substr(0, -1)
         elif "calculated_props" in child:
             max_ascent  = max(max_ascent , child.max_ascent)
             max_descent = max(max_descent, child.max_descent)
-        var cursor = pair[1]
-        var size = pair[2]
-        var offset = pair[3]
-        if pair == row[0]:
+            prev_label_text = ""
+        else:
+            prev_label_text = ""
+        
+        var cursor = info[1]
+        var size = info[2]
+        var offset = info[3]
+        
+        if i == 0:
             min_x = cursor
             max_x = cursor+size.x
         else:
             max_x = max(max_x, cursor + size.x)
+    
     
     var base_offset = 0
     var gap_offset = 0
     
     var justify = calculated_props.justify
     if !wrapped and justify == "justified":
-        justify = "left"
+        justify = "start"
     
-    if justify == "left":
+    
+    if justify == "start":
         pass
-    elif justify == "right":
+    elif justify == "end":
         base_offset = x_limit - max_x
     elif justify == "center":
         base_offset = (x_limit - max_x)*0.5
@@ -594,32 +628,32 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrap
         gap_offset += (x_limit - max_x)/row.size()
     
     var i = 0
-    for pair in row:
-        var child : Control = pair[0]
-        var x : float = pair[1]
-        var child_size : Vector2 = pair[2]
-        var offset : Vector2 = pair[3]
+    for info in row:
+        var child : Control = info[0]
+        var x : float = info[1]
+        var child_size : Vector2 = info[2]
+        var offset : Vector2 = info[3]
         var y = bottom - child_size.y
-        if calculated_props.vertical_align == "middle":
+        if calculated_props.row_align == "middle":
             y = bottom/2 + top/2 + child_size.y/2
-        elif calculated_props.vertical_align == "top":
+        elif calculated_props.row_align == "top":
             y = top
         if child is Label:
             var font = (child as Label).get_font("font")
-            if calculated_props.vertical_align == "middle":
+            if calculated_props.row_align == "middle":
                 offset.y += max_ascent/2 + max_descent/-2
                 offset.y -= font.get_ascent()/2 + font.get_descent()/-2
-            elif calculated_props.vertical_align == "top":
+            elif calculated_props.row_align == "top":
                 offset.y += max_ascent
                 offset.y -= font.get_ascent()
             else:
                 offset.y -= max_descent
                 offset.y += font.get_descent()
         elif "calculated_props" in child:
-            if calculated_props.vertical_align == "middle":
+            if calculated_props.row_align == "middle":
                 offset.y += max_ascent/2 + max_descent/-2
                 offset.y -= child.max_ascent/2 + child.max_descent/-2
-            elif calculated_props.vertical_align == "top":
+            elif calculated_props.row_align == "top":
                 offset.y += max_ascent
                 offset.y -= child.max_ascent
             else:
@@ -627,6 +661,15 @@ func _reflow_row(row : Array, top : float, bottom : float, x_limit : float, wrap
                 offset.y += child.max_descent
         
         offset.x += gap_offset*i
+        
+        # mirroring
+        if right_to_left:
+            var left_x = x
+            var right_x = x + child_size.x
+            left_x = x_limit - left_x
+            right_x = x_limit - right_x
+            x = right_x
+            #offset.x = right_x - x
         
         var origin = get_global_rect().position
         child.set_global_position(Vector2(x + base_offset, y) + offset + origin)
@@ -701,33 +744,39 @@ func reflow():
         _v_scrollbar.visible = true
         rect_clip_content = true
     
-    if calculated_props.layout == "flow_h_lr":
-        var parent_size = get_parent_area_size()
-        if layout_parent:
-            parent_size = layout_parent.rect_size
-        #print(doc_name, parent_size)
-        var size = Vector2()
-        size.x = parent_size.x * (anchor_right - anchor_left)
-        size.y = parent_size.y * (anchor_bottom - anchor_top)
-        size.x -= calculated_props.margin_left + calculated_props.margin_right
-        size.y -= calculated_props.margin_top + calculated_props.margin_bottom
-        var total_padding = Vector2(calculated_props.padding_right + calculated_props.padding_left, calculated_props.padding_top + calculated_props.padding_bottom)
-        var x_limit = size.x - calculated_props.padding_right
-        var y_limit = size.y - calculated_props.padding_bottom
-        var x_buffer = 0
-        var y_buffer = 0
-        if _v_scrollbar.visible:
-            var extra_pad = calculated_props.padding_right + _v_scrollbar.rect_size.x
-            x_limit -= extra_pad
-            x_buffer += extra_pad
-        if _h_scrollbar.visible:
-            var extra_pad = calculated_props.padding_bottom + _h_scrollbar.rect_size.y
-            y_limit -= extra_pad
-            y_buffer += extra_pad
+    var parent_size = get_parent_area_size()
+    if layout_parent:
+        parent_size = layout_parent.rect_size
+    
+    var size = Vector2()
+    size.x = parent_size.x * (anchor_right - anchor_left)
+    size.y = parent_size.y * (anchor_bottom - anchor_top)
+    size.x -= calculated_props.margin_left + calculated_props.margin_right
+    size.y -= calculated_props.margin_top + calculated_props.margin_bottom
+    var total_padding = Vector2(calculated_props.padding_right + calculated_props.padding_left, calculated_props.padding_top + calculated_props.padding_bottom)
+    var x_limit = size.x - calculated_props.padding_right
+    var y_limit = size.y - calculated_props.padding_bottom
+    var x_buffer = 0
+    var y_buffer = 0
+    var x_scroll_pad = 0
+    var y_scroll_pad = 0
+    if _v_scrollbar.visible:
+        var extra_pad = calculated_props.padding_right + _v_scrollbar.rect_size.x
+        x_scroll_pad = _v_scrollbar.rect_size.x
+        x_limit -= extra_pad
+        x_buffer += extra_pad
+    if _h_scrollbar.visible:
+        var extra_pad = calculated_props.padding_bottom + _h_scrollbar.rect_size.y
+        y_scroll_pad = _h_scrollbar.rect_size.y
+        y_limit -= extra_pad
+        y_buffer += extra_pad
+    
+    if calculated_props.layout == "flow":
+        #var left_to_right = calculated_props.layout_direction.find("lr") >= 0
         
-        var x_cursor = calculated_props.padding_left
-        var y_cursor = calculated_props.padding_top
-        var y_cursor_next = 0
+        var x_cursor = calculated_props.padding_left# if left_to_right else x_limit - calculated_props.padding_right
+        var y_cursor = calculated_props.padding_top# if top_to_bottom else y_limit - calculated_props.padding_bottom
+        var y_cursor_next = y_cursor
         var rows = []
         var row = []
         var process_nodes = []
@@ -738,17 +787,14 @@ func reflow():
         
         var max_x = 0
         
-        rect_size = Vector2(x_limit, y_limit) - Vector2(x_cursor, y_cursor)
+        rect_size = Vector2(x_limit, y_limit) - Vector2(calculated_props.padding_left, calculated_props.padding_top)
         #rect_size.x -= calculated_props.padding_left
         #rect_size.x -= calculated_props.padding_right
         
         var check_queue = []
         if doc_name == "root" or calculated_props.display != "inline":
-            check_queue= get_children()
-        #if check_queue.size() == 1 and check_queue[0] is DocumentHelpers.DocScrollContents:
-        #    check_queue[0].rect_size = interior_size
-        #    check_queue[0].rect_position = Vector2(x_cursor, y_cursor)
-        #    pass
+            check_queue = get_children()
+        
         while check_queue.size() > 0:
             var _child = check_queue.pop_front()
             var _parent = self
@@ -824,6 +870,8 @@ func reflow():
             var force_next_row_new = false
             if row.size() > 0 and (x_cursor + child_size.x > x_limit or child.size_flags_horizontal & SIZE_EXPAND):
                 new_row = true
+            if calculated_props.wrap == "never":
+                new_row = false
             if "calculated_props" in child and child.calculated_props.display == "block":
                 new_row = true
                 force_next_row_new = true
@@ -906,13 +954,29 @@ func reflow():
         _custom_rect = Rect2(start, visible_interior_size + Vector2(x_buffer, y_buffer))
         #_custom_rect = Rect2(start, visible_interior_size)
         
-        
+        var bottom_to_top = calculated_props.layout_direction.find("bt") >= 0
+        if bottom_to_top:
+            var bottom = visible_interior_size.y
+            for data in rows:
+                var r_y_cursor_next = data[2]
+                bottom = max(bottom, r_y_cursor_next)
+            bottom += y_scroll_pad
+            for i in rows.size():
+                var data = rows[i]
+                var r_y_cursor = data[1]
+                var r_y_cursor_next = data[2]
+                data[1] = bottom - r_y_cursor_next
+                data[2] = bottom - r_y_cursor
+                
+            rows.invert()
         for data in rows:
             var r_row = data[0]
             var r_y_cursor = data[1]
             var r_y_cursor_next = data[2]
             var r_wrapped = data[3]
-            _reflow_row(r_row, r_y_cursor, r_y_cursor_next, rect_size.x - calculated_props.padding_right, r_wrapped)
+            #if !left_to_right:
+            #    r_row.invert()
+            _reflow_row(r_row, r_y_cursor, r_y_cursor_next, visible_interior_size.x + x_buffer, r_wrapped)
         
         _update_v_scroll(0) # passed value is ignored
 
