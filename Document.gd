@@ -541,20 +541,23 @@ func tri(x):
     x /= 4
     return abs(x - floor(x)-0.5)*4-1
 
+func go_to_test_scene():
+    var default_style_data = DocumentHelpers.parse_style(default_stylesheet)
+    var style_data = DocumentHelpers.parse_style(root_stylesheet)
+    var scene = from_xml(markup)
+    get_tree().current_scene.queue_free()
+    get_tree().get_root().add_child(scene)
+    get_tree().current_scene = scene
+    scene.queue_sort()
+    scene.default_style_data = default_style_data
+    scene.style_data = style_data
+
 var asdf = 0
 var time = 0
 func _process(delta):
     time += delta
     if Input.is_action_just_pressed("ui_accept") and is_inside_tree() and self == get_tree().current_scene:
-        var default_style_data = DocumentHelpers.parse_style(default_stylesheet)
-        var style_data = DocumentHelpers.parse_style(root_stylesheet)
-        var scene = from_xml(markup)
-        get_tree().current_scene.queue_free()
-        get_tree().get_root().add_child(scene)
-        get_tree().current_scene = scene
-        scene.queue_sort()
-        scene.default_style_data = default_style_data
-        scene.style_data = style_data
+        go_to_test_scene()
     # performance test
     #if is_inside_tree() and self == get_tree().current_scene:
     #    anchor_right = lerp(0.25, 1.0, tri(time)/2+0.5)
@@ -904,7 +907,7 @@ func reflow():
         
         var interior_size = Vector2(max_x, y_cursor_next) - start
         
-        print("--", doc_name, "-", max_x, "-", x_limit, "-", parent_size.x)
+        #print("--", doc_name, "-", max_x, "-", x_limit, "-", parent_size.x)
         
         new_size.x = max_x + calculated_props.padding_right + x_buffer
         new_size.x = calc_prop_width(new_size.x, x_limit)
